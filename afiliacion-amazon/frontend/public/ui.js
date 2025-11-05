@@ -1,5 +1,12 @@
+function ensureUrl(u){
+  const s = (u||'').trim();
+  if(!s) return s;
+  const withProto = s.startsWith('http://') || s.startsWith('https://') ? s : `https://${s}`;
+  return withProto.replace(/\/?$/, '');
+}
+
 async function generarArticulos() {
-  const apiBase = document.getElementById('api_base').value.trim();
+  const apiBase = ensureUrl(document.getElementById('api_base').value);
   const busqueda = document.getElementById('busqueda').value.trim();
   const categoria = document.getElementById('categoria').value.trim();
   const num_articulos = parseInt(document.getElementById('num_articulos').value, 10) || 1;
@@ -56,7 +63,7 @@ async function generarArticulos() {
 }
 
 async function exportarXML() {
-  const apiBase = document.getElementById('api_base').value.trim();
+  const apiBase = ensureUrl(document.getElementById('api_base').value);
   const busqueda = document.getElementById('busqueda').value.trim();
   const categoria = document.getElementById('categoria').value.trim();
   const num_articulos = parseInt(document.getElementById('num_articulos').value, 10) || 1;

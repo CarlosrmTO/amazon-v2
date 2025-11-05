@@ -11,9 +11,13 @@ load_dotenv()
 
 app = FastAPI(title="Generador de Contenidos",
               description="Microservicio que genera artículos humanos para afiliación Amazon")
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 DEFAULT_AFFILIATE_TAG = os.getenv("DEFAULT_AFFILIATE_TAG", "theobjective-21")
+
+def get_openai_client():
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY no configurada")
+    return OpenAI(api_key=key)
 
 class Producto(BaseModel):
     titulo: str
@@ -105,6 +109,7 @@ Instrucciones estrictas:
 - Evita clichés, listas forzadas y cualquier rastro de automatización.
 """
 
+        client = get_openai_client()
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

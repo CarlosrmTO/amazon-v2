@@ -1,10 +1,13 @@
 import pytest
 from fastapi.testclient import TestClient
 import os
-import sys
+import importlib.util
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'microservicios', 'frontend-api')))
-from main import app  # noqa
+FE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'afiliacion-amazon', 'backend', 'microservicios', 'frontend-api', 'main.py'))
+spec = importlib.util.spec_from_file_location('frontend_api_main', FE_PATH)
+fe_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fe_module)  # type: ignore
+app = fe_module.app  # noqa
 
 client = TestClient(app)
 
@@ -44,7 +47,7 @@ async def _fake_generar_articulo(tema, productos, kw_main, kw_sec):
 
 
 def test_generar_articulos_y_xml(monkeypatch):
-    import main as mod
+    mod = fe_module
     monkeypatch.setattr(mod, 'buscar_productos', _fake_buscar_productos)
     monkeypatch.setattr(mod, 'generar_articulo', _fake_generar_articulo)
 
@@ -72,3 +75,19 @@ def test_generar_articulos_y_xml(monkeypatch):
     r3 = client.post('/export/wp-all-import/zip', json=payload)
     assert r3.status_code == 200
     assert r3.headers.get('Content-Type') == 'application/zip'
+
+
+def test_health_ok():
+    r = client.get('/health')
+    assert r.status_code == 200
+    data = r.json()
+    assert 'status' in data and data['status'] == 'ok'
+    assert 'api_paapi_url' in data
+    assert 'gen_content_url' in data
+
+
+def test_ensure_url_normalization():
+    mod = fe_module
+    assert mod._ensure_url('example.com') == 'https://example.com'
+    assert mod._ensure_url('https://example.com') == 'https://example.com'
+    assert mod._ensure_url('') == ''

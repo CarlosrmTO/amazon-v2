@@ -21,10 +21,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_PAAPI_URL = os.getenv("API_PAAPI_URL", "http://localhost:8000")
-GEN_CONTENT_URL = os.getenv("GEN_CONTENT_URL", "http://localhost:8010")
+def _ensure_url(u: str) -> str:
+    u = (u or "").strip()
+    if not u:
+        return u
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+    return "https://" + u
+
+API_PAAPI_URL = _ensure_url(os.getenv("API_PAAPI_URL", "http://localhost:8000"))
+GEN_CONTENT_URL = _ensure_url(os.getenv("GEN_CONTENT_URL", "http://localhost:8010"))
 DEFAULT_ITEMS_PER_ARTICLE = int(os.getenv("DEFAULT_ITEMS_PER_ARTICLE", 5))
 DEFAULT_CATEGORY = os.getenv("DEFAULT_SEARCH_INDEX", "All")
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "api_paapi_url": API_PAAPI_URL,
+        "gen_content_url": GEN_CONTENT_URL,
+        "default_items_per_article": DEFAULT_ITEMS_PER_ARTICLE,
+        "default_category": DEFAULT_CATEGORY,
+    }
 
 class Producto(BaseModel):
     titulo: str

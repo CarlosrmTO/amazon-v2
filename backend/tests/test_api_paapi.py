@@ -2,10 +2,13 @@ import types
 import pytest
 from fastapi.testclient import TestClient
 import os
-import sys
+import importlib.util
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'microservicios', 'api-paapi')))
-from main import app
+API_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'afiliacion-amazon', 'backend', 'microservicios', 'api-paapi', 'main.py'))
+spec = importlib.util.spec_from_file_location('api_paapi_main', API_PATH)
+api_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(api_module)  # type: ignore
+app = api_module.app
 
 client = TestClient(app)
 
@@ -70,10 +73,11 @@ def test_buscar_construye_enlace_afiliado(monkeypatch):
     monkeypatch.setenv('PAAPI_ASSOCIATE_TAG', 'theobjective-21')
 
     # Monkeypatch de la llamada al SDK
-    import main as api_mod
-    def fake_search_items(req):
+    api_mod = api_module
+    def fake_search_items(**kwargs):
         return _Response(2)
-    monkeypatch.setattr(api_mod, 'api', types.SimpleNamespace(search_items=fake_search_items))
+    # Reemplaza el cliente amazon_api con un stub que aporta search_items
+    monkeypatch.setattr(api_mod, 'amazon_api', types.SimpleNamespace(search_items=fake_search_items))
 
     resp = client.get('/buscar', params={
         'busqueda': 'auriculares',
