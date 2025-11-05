@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query
-from amazon.paapi import AmazonApi
+from amazon_paapi import AmazonApi
 import os
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
