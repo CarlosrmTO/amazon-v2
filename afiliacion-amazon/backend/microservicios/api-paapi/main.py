@@ -1,10 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query
-from paapi5_python_sdk.api.default_api import DefaultApi
-from paapi5_python_sdk.configuration import Configuration
-from paapi5_python_sdk.api_client import ApiClient
-from paapi5_python_sdk.models.search_items_request import SearchItemsRequest
-from paapi5_python_sdk.models.search_items_resource import SearchItemsResource
-from paapi5_python_sdk.rest import ApiException
+from amazon.paapi import AmazonApi
 import os
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,21 +24,16 @@ app.add_middleware(
 # Configuración de la API de Amazon
 ACCESS_KEY = os.getenv('AWS_ACCESS_KEY')
 SECRET_KEY = os.getenv('AWS_SECRET_KEY')
-HOST = os.getenv('PAAPI_HOST', 'webservices.amazon.es')
-REGION = os.getenv('PAAPI_REGION', 'eu-west-1')
 PARTNER_TAG = os.getenv('PAAPI_ASSOCIATE_TAG') or os.getenv('AMAZON_ASSOCIATE_TAG') or 'theobjective-21'
+# País para AmazonApi ("ES" para España)
+COUNTRY = os.getenv('PAAPI_COUNTRY', 'ES')
 
-if not ACCESS_KEY or not SECRET_KEY:
-    # Se informará en runtime si falta configuración
-    pass
-
-_paapi_config = Configuration(
-    access_key=ACCESS_KEY,
-    secret_key=SECRET_KEY,
-    host=HOST,
-    region=REGION,
-)
-api = DefaultApi(ApiClient(_paapi_config))
+amazon_api = None
+if ACCESS_KEY and SECRET_KEY:
+    try:
+        amazon_api = AmazonApi(ACCESS_KEY, SECRET_KEY, PARTNER_TAG, COUNTRY)
+    except Exception:
+        amazon_api = None
 
 class ProductoRespuesta(BaseModel):
     asin: str
@@ -67,57 +57,45 @@ async def buscar_productos(
     Busca productos en Amazon y devuelve los resultados con enlaces de afiliado
     """
     try:
-        # Configuración de la búsqueda
-        search_items_resource = [
-            SearchItemsResource.ITEMINFO_TITLE,
-            SearchItemsResource.IMAGES_PRIMARY_LARGE,
-            SearchItemsResource.ITEMINFO_BY_LINE_INFO,
-            SearchItemsResource.OFFERS_LISTINGS_PRICE,
-        ]
+        if amazon_api is None:
+            raise HTTPException(status_code=500, detail="PAAPI no está configurado correctamente (credenciales ausentes o cliente no inicializado)")
 
-        search_request = SearchItemsRequest(
-            partner_tag=PARTNER_TAG,
-            partner_type='Associates',
-            keywords=busqueda,
-            search_index=categoria,
-            item_count=num_resultados,
-            resources=search_items_resource,
-            sort_by=sort_by
-        )
+        # Nota: python-amazon-paapi no expone un 'sort_by' directo en todas las operaciones.
+        # Priorizar num_resultados y categoría; la ordenación por SalesRank se aproxima según disponibilidad.
+        items = amazon_api.search_items(keywords=busqueda, search_index=categoria, item_count=num_resultados)
 
-        # Realizar la búsqueda
-        response = api.search_items(search_request)
-        
-        if response.search_result is None:
+        if not items:
             return []
 
-        # Procesar resultados
         resultados = []
-        for item in response.search_result.items:
+        for item in items:
             # Construir URL de afiliado
-            url_base = item.detail_page_url
+            url_base = getattr(item, 'detail_page_url', '') or getattr(item, 'url', '')
             tag_afiliado = f"?tag={PARTNER_TAG}"
             url_afiliado = f"{url_base}{tag_afiliado if '?' not in url_base else '&' + tag_afiliado[1:]}"
             
             # Obtener precio
             precio = "Precio no disponible"
-            if hasattr(item, 'offers') and item.offers and item.offers.listings:
-                precio = f"{item.offers.listings[0].price.amount} {item.offers.listings[0].price.currency}"
+            try:
+                amount = getattr(getattr(item, 'list_price', None), 'amount', None) or getattr(getattr(item, 'price', None), 'amount', None)
+                currency = getattr(getattr(item, 'list_price', None), 'currency', None) or getattr(getattr(item, 'price', None), 'currency', None)
+                if amount and currency:
+                    precio = f"{amount} {currency}"
+            except Exception:
+                pass
             
             # Obtener marca
-            marca = None
-            if hasattr(item, 'item_info') and hasattr(item.item_info, 'by_line_info'):
-                marca = item.item_info.by_line_info.manufacturer
+            marca = getattr(item, 'brand', None) or getattr(item, 'manufacturer', None)
             
-            # Calificaciones (no garantizadas, omitimos para compatibilidad segura)
+            # Calificaciones (no garantizadas en este wrapper)
             calificacion = None
             total_valoraciones = None
             
             resultados.append(ProductoRespuesta(
-                asin=item.asin,
-                titulo=item.item_info.title.display_value if hasattr(item, 'item_info') else "Sin título",
+                asin=getattr(item, 'asin', ''),
+                titulo=(getattr(item, 'title', None) or getattr(item, 'product_title', None) or "Sin título"),
                 precio=precio,
-                url_imagen=item.images.primary.large.url if hasattr(item, 'images') and item.images.primary.large else "",
+                url_imagen=(getattr(item, 'image_url', None) or getattr(item, 'large_image_url', None) or ""),
                 url_producto=url_base,
                 url_afiliado=url_afiliado,
                 marca=marca,
@@ -126,9 +104,6 @@ async def buscar_productos(
             ))
         
         return resultados
-    
-    except ApiException as e:
-        raise HTTPException(status_code=500, detail=f"Error en la API de Amazon: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
