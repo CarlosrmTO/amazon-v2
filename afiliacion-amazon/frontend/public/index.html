@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generador de Artículos Amazon – The Objective</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <span class="navbar-brand">Generador The Objective</span>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="row g-4">
+      <div class="col-12 col-lg-4">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">Parámetros</h5>
+            <div class="mb-3">
+              <label class="form-label">Keywords (búsqueda Amazon)</label>
+              <input id="busqueda" type="text" class="form-control" placeholder="auriculares bluetooth">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Categoría (SearchIndex)</label>
+              <input id="categoria" type="text" class="form-control" value="All">
+              <div class="form-text">Ej.: Electronics, All, FashionMen, Kitchen...</div>
+            </div>
+            <div class="row">
+              <div class="col-6 mb-3">
+                <label class="form-label"># Artículos</label>
+                <input id="num_articulos" type="number" class="form-control" value="3" min="1" max="10">
+              </div>
+              <div class="col-6 mb-3">
+                <label class="form-label">Items por artículo</label>
+                <input id="items_por_articulo" type="number" class="form-control" value="5" min="1" max="10">
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Tema (opcional)</label>
+              <input id="tema" type="text" class="form-control" placeholder="Los mejores ... de 2025">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Palabra clave principal</label>
+              <input id="kw_main" type="text" class="form-control" placeholder="auriculares inalámbricos con cancelación de ruido">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Palabras clave secundarias</label>
+              <input id="kw_sec" type="text" class="form-control" placeholder="Bluetooth 5.3, batería de larga duración, mejor calidad de sonido">
+              <div class="form-text">Separadas por coma</div>
+            </div>
+            <div class="d-grid gap-2">
+              <button id="btn-generar" class="btn btn-primary">Generar artículos (vista previa)</button>
+              <button id="btn-exportar" class="btn btn-success">Exportar XML (WP All Import)</button>
+            </div>
+            <hr>
+            <div class="mb-2">
+              <label class="form-label">Frontend API URL</label>
+              <input id="api_base" type="text" class="form-control" value="http://localhost:8020">
+              <div class="form-text">Puedes cambiarlo si despliegas en Railway/VPS.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">Vista previa</h5>
+            <div id="status" class="small text-muted"></div>
+            <div id="preview" class="mt-3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="./ui.js"></script>
+</body>
+</html>

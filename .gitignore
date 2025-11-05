@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Env
+.env
+*.env
+
+# macOS
+.DS_Store
+
+# Credentials (do not commit)
+afiliacion-amazon/backend/microservicios/api-paapi/PAAPICredentials*.csv
+
+# Node / Frontend
+node_modules/
+.npm/
+
+# Build artifacts
+*.log
+*.zip

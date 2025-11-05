@@ -1,0 +1,31 @@
+version: "3.9"
+services:
+  api-paapi:
+    build: ../afiliacion-amazon/backend/microservicios/api-paapi
+    env_file:
+      - ../afiliacion-amazon/backend/microservicios/api-paapi/.env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  generador-contenido:
+    build: ../afiliacion-amazon/backend/microservicios/generador-contenido
+    env_file:
+      - ../afiliacion-amazon/backend/microservicios/generador-contenido/.env
+    ports:
+      - "8010:8010"
+    restart: unless-stopped
+
+  frontend-api:
+    build: ../afiliacion-amazon/backend/microservicios/frontend-api
+    env_file:
+      - ../afiliacion-amazon/backend/microservicios/frontend-api/.env
+    environment:
+      - API_PAAPI_URL=http://api-paapi:8000
+      - GEN_CONTENT_URL=http://generador-contenido:8010
+    ports:
+      - "8020:8020"
+    depends_on:
+      - api-paapi
+      - generador-contenido
+    restart: unless-stopped
