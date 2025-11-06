@@ -81,8 +81,9 @@ class ProductoRespuesta(BaseModel):
 async def buscar_productos(
     busqueda: str = Query(..., description="Término de búsqueda"),
     categoria: str = Query("All", description="Categoría de búsqueda"),
-    num_resultados: int = Query(10, ge=1, le=50, description="Número de resultados (1-50)"),
-    sort_by: str = Query("SalesRank", description="Orden (por ejemplo: SalesRank)")
+    num_resultados: int = Query(10, ge=1, le=50, description="Número de resultados solicitados (1-50)"),
+    sort_by: str = Query("SalesRank", description="Orden (por ejemplo: SalesRank)"),
+    pagina: int = Query(1, ge=1, le=10, description="Página de resultados (1-10)")
 ):
     """
     Busca productos en Amazon y devuelve los resultados con enlaces de afiliado
@@ -99,7 +100,14 @@ async def buscar_productos(
 
         # Nota: python-amazon-paapi no expone un 'sort_by' directo en todas las operaciones.
         # Priorizar num_resultados y categoría; la ordenación por SalesRank se aproxima según disponibilidad.
-        items = amazon_api.search_items(keywords=busqueda, search_index=categoria, item_count=num_resultados)
+        # PAAPI limita item_count a [1,10] y item_page a [1,10]
+        item_count = max(1, min(10, int(num_resultados)))
+        items = amazon_api.search_items(
+            keywords=busqueda,
+            search_index=categoria,
+            item_count=item_count,
+            item_page=pagina,
+        )
 
         if not items:
             return []
