@@ -35,6 +35,21 @@ if ACCESS_KEY and SECRET_KEY:
     except Exception:
         amazon_api = None
 
+@app.get("/health")
+async def health():
+    def _mask(s: str | None):
+        if not s:
+            return None
+        return s[:2] + "***" + s[-2:]
+    return {
+        "status": "ok",
+        "initialized": amazon_api is not None,
+        "has_access_key": bool(ACCESS_KEY),
+        "has_secret_key": bool(SECRET_KEY),
+        "partner_tag": _mask(PARTNER_TAG),
+        "country": COUNTRY,
+    }
+
 class ProductoRespuesta(BaseModel):
     asin: str
     titulo: str
@@ -58,7 +73,13 @@ async def buscar_productos(
     """
     try:
         if amazon_api is None:
-            raise HTTPException(status_code=500, detail="PAAPI no está configurado correctamente (credenciales ausentes o cliente no inicializado)")
+            raise HTTPException(status_code=500, detail={
+                "error": "PAAPI not initialized",
+                "has_access_key": bool(ACCESS_KEY),
+                "has_secret_key": bool(SECRET_KEY),
+                "partner_tag": PARTNER_TAG,
+                "country": COUNTRY,
+            })
 
         # Nota: python-amazon-paapi no expone un 'sort_by' directo en todas las operaciones.
         # Priorizar num_resultados y categoría; la ordenación por SalesRank se aproxima según disponibilidad.
