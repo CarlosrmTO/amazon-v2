@@ -135,6 +135,40 @@ async def buscar_productos(
             return []
 
         resultados = []
+
+        def _get_image_url(it):
+            try:
+                # Plan A: atributos directos
+                direct = (
+                    getattr(it, 'image_url', None)
+                    or getattr(it, 'large_image_url', None)
+                )
+                if direct:
+                    return direct
+                # Plan B: rutas anidadas comunes
+                def walk(obj, path):
+                    cur = obj
+                    for p in path:
+                        cur = getattr(cur, p, None)
+                        if cur is None:
+                            return None
+                    return cur
+                candidates = [
+                    ('images', 'primary', 'large', 'url'),
+                    ('images', 'primary', 'medium', 'url'),
+                    ('images', 'primary', 'small', 'url'),
+                    ('large_image', 'url'),
+                    ('medium_image', 'url'),
+                    ('small_image', 'url'),
+                    ('image', 'url'),
+                ]
+                for path in candidates:
+                    v = walk(it, path)
+                    if isinstance(v, str) and v:
+                        return v
+            except Exception:
+                pass
+            return ""
         for item in items:
             # Construir URL de afiliado
             url_base = getattr(item, 'detail_page_url', '') or getattr(item, 'url', '')
@@ -162,7 +196,7 @@ async def buscar_productos(
                 asin=getattr(item, 'asin', ''),
                 titulo=(getattr(item, 'title', None) or getattr(item, 'product_title', None) or "Sin título"),
                 precio=precio,
-                url_imagen=(getattr(item, 'image_url', None) or getattr(item, 'large_image_url', None) or ""),
+                url_imagen=_get_image_url(item),
                 url_producto=url_base,
                 url_afiliado=url_afiliado,
                 marca=marca,
