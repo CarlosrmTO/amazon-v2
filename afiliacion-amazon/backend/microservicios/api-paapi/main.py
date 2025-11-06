@@ -12,6 +12,18 @@ load_dotenv()
 app = FastAPI(title="API PAAPI5", 
               description="API para interactuar con Amazon Product Advertising API 5.0")
 
+@app.on_event("startup")
+async def _on_startup():
+    try:
+        import logging, os as _os
+        logging.getLogger("uvicorn").info(f"api-paapi starting on PORT={_os.getenv('PORT')}")
+    except Exception:
+        pass
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "api-paapi"}
+
 # Configuración CORS
 app.add_middleware(
     CORSMiddleware,
@@ -37,18 +49,22 @@ if ACCESS_KEY and SECRET_KEY:
 
 @app.get("/health")
 async def health():
-    def _mask(s: str | None):
-        if not s:
-            return None
-        return s[:2] + "***" + s[-2:]
-    return {
-        "status": "ok",
-        "initialized": amazon_api is not None,
-        "has_access_key": bool(ACCESS_KEY),
-        "has_secret_key": bool(SECRET_KEY),
-        "partner_tag": _mask(PARTNER_TAG),
-        "country": COUNTRY,
-    }
+    try:
+        def _mask(s: Optional[str]):
+            if not s:
+                return None
+            return s[:2] + "***" + s[-2:]
+        return {
+            "status": "ok",
+            "initialized": bool(amazon_api is not None),
+            "has_access_key": bool(ACCESS_KEY),
+            "has_secret_key": bool(SECRET_KEY),
+            "partner_tag": _mask(PARTNER_TAG),
+            "country": COUNTRY,
+        }
+    except Exception as e:
+        # Siempre devolver JSON para facilitar diagnóstico
+        return {"status": "error", "detail": str(e)}
 
 class ProductoRespuesta(BaseModel):
     asin: str
