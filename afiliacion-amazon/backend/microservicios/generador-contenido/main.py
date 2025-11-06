@@ -19,6 +19,18 @@ def get_openai_client():
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY no configurada")
     return OpenAI(api_key=key)
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "generador-contenido"}
+
+@app.get("/health")
+async def health():
+    try:
+        has_key = bool(os.getenv("OPENAI_API_KEY"))
+        return {"status": "ok", "openai_configured": has_key, "affiliate_tag": DEFAULT_AFFILIATE_TAG}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 class Producto(BaseModel):
     titulo: str
     url_producto: str
