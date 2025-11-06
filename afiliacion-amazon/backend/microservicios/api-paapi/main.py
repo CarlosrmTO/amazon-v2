@@ -102,12 +102,34 @@ async def buscar_productos(
         # Priorizar num_resultados y categoría; la ordenación por SalesRank se aproxima según disponibilidad.
         # PAAPI limita item_count a [1,10] y item_page a [1,10]
         item_count = max(1, min(10, int(num_resultados)))
-        items = amazon_api.search_items(
-            keywords=busqueda,
-            search_index=categoria,
-            item_count=item_count,
-            item_page=pagina,
-        )
+        kwargs = {
+            "keywords": busqueda,
+            "item_count": item_count,
+            "item_page": pagina,
+        }
+        if categoria and categoria.strip() and categoria.strip().lower() != "all":
+            kwargs["search_index"] = categoria.strip()
+        result = amazon_api.search_items(**kwargs)
+
+        # Normalizar posibles envoltorios (p.ej., SearchResult) a lista de items
+        def _to_list(x):
+            if x is None:
+                return []
+            if isinstance(x, list):
+                return x
+            for attr in ("items", "search_result", "searchResult", "results", "Results"):
+                v = getattr(x, attr, None)
+                if v is not None:
+                    try:
+                        return list(v) if not isinstance(v, list) else v
+                    except Exception:
+                        pass
+            try:
+                return list(x)
+            except Exception:
+                return []
+
+        items = _to_list(result)
 
         if not items:
             return []
