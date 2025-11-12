@@ -107,18 +107,8 @@ async def buscar_productos(
             "item_count": item_count,
             "item_page": pagina,
         }
-        # Solicitar recursos necesarios para precios e imágenes
-        kwargs["resources"] = [
-            # Imágenes
-            "Images.Primary.Large",
-            "Images.Primary.Medium",
-            "Images.Primary.Small",
-            # Precios/Ofertas
-            "Offers.Listings.Price",
-            "Offers.Summaries.LowestPrice",
-            # Título y campos básicos (por si el wrapper los requiere)
-            "ItemInfo.Title",
-        ]
+        # Nota: algunos wrappers de PAAPI ya inyectan 'resources' internamente.
+        # Evitamos pasarlo aquí para no provocar 'multiple values for keyword argument \"resources\"'.
         if categoria and categoria.strip() and categoria.strip().lower() != "all":
             kwargs["search_index"] = categoria.strip()
         result = amazon_api.search_items(**kwargs)
