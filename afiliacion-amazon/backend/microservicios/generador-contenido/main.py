@@ -4,6 +4,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 import os
 import re
+import html as html_module
 
 # OpenAI SDK v1.x
 from openai import OpenAI
@@ -136,6 +137,24 @@ Instrucciones estrictas de salida (cumple todas):
         )
         content = completion.choices[0].message.content
 
+        # Normalización: quitar fences ```html, desescapar entidades y extraer <body>
+        try:
+            raw = content or ""
+            s = raw.strip()
+            if s.startswith("```"):
+                s = re.sub(r'^```[a-zA-Z]*\n?', '', s)
+                s = re.sub(r'\n?```\s*$', '', s)
+            # Si parece HTML escapado (&lt;html&gt;), desescapar
+            if "&lt;" in s and "&gt;" in s:
+                s = html_module.unescape(s)
+            # Si contiene <body>, quedarnos con su contenido
+            m = re.search(r'<body[^>]*>([\s\S]*?)</body>', s, flags=re.IGNORECASE)
+            if m:
+                s = m.group(1)
+            content = s
+        except Exception:
+            pass
+
         # Inyección defensiva de imágenes si el modelo las omitiera
         try:
             html = content or ""
@@ -160,6 +179,27 @@ Instrucciones estrictas de salida (cumple todas):
             for idx, p in enumerate(productos, start=1):
                 pattern = re.compile(rf'(<'+'h[2-4]'+r'[^>]*>)\s*Producto\s+'+str(idx)+r'(</'+'h[2-4]'+r'>)', re.IGNORECASE)
                 html = pattern.sub(rf"\\1{p.titulo}\\2", html)
+            content = html
+        except Exception:
+            pass
+
+        try:
+            html = content or ""
+            for p in productos:
+                display = (f"{(p.marca or '').strip()} {p.titulo}" if p.marca else p.titulo).strip()
+                target = p.url_imagen or p.url_afiliado or p.url_producto
+                if not target:
+                    continue
+                idx = html.find(target)
+                if idx == -1:
+                    continue
+                heading_iter = list(re.finditer(r'<h([2-4])[^>]*>.*?</h\1>', html[:idx], flags=re.IGNORECASE|re.DOTALL))
+                if heading_iter:
+                    last = heading_iter[-1]
+                    inner = re.sub(r'^<h([2-4])([^>]*)>.*?</h\1>$', rf'<h\\1\\2>{display}</h\\1>', last.group(0), flags=re.IGNORECASE|re.DOTALL)
+                    html = html[:last.start()] + inner + html[last.end():]
+                else:
+                    html = html[:idx] + f"<h3>{display}</h3>" + html[idx:]
             content = html
         except Exception:
             pass
