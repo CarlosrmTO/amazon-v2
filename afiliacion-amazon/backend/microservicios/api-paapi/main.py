@@ -111,7 +111,25 @@ async def buscar_productos(
         # Evitamos pasarlo aquí para no provocar 'multiple values for keyword argument \"resources\"'.
         if categoria and categoria.strip() and categoria.strip().lower() != "all":
             kwargs["search_index"] = categoria.strip()
-        result = amazon_api.search_items(**kwargs)
+        try:
+            result = amazon_api.search_items(**kwargs)
+        except Exception as e:
+            # Reintento conservador: sin search_index y con menos resultados
+            try:
+                safe_kwargs = {
+                    "keywords": busqueda.strip(),
+                    "item_count": min(5, item_count),
+                    "item_page": pagina,
+                }
+                result = amazon_api.search_items(**safe_kwargs)
+            except Exception as e2:
+                detail = {
+                    "error": "PAAPI invalid parameters",
+                    "first_attempt": {k: v for k, v in kwargs.items() if k != "keywords"},
+                    "second_attempt": {k: v for k, v in safe_kwargs.items() if k != "keywords"},
+                    "message": str(e2) or str(e),
+                }
+                raise HTTPException(status_code=400, detail=detail)
 
         # Normalizar posibles envoltorios (p.ej., SearchResult) a lista de items
         def _to_list(x):
