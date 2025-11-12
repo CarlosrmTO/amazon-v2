@@ -42,10 +42,15 @@ GEN_CONTENT_URL = _ensure_url(os.getenv("GEN_CONTENT_URL", "http://localhost:801
 DEFAULT_ITEMS_PER_ARTICLE = int(os.getenv("DEFAULT_ITEMS_PER_ARTICLE", 5))
 DEFAULT_CATEGORY = os.getenv("DEFAULT_SEARCH_INDEX", "All")
 
+APP_VERSION = os.getenv("APP_VERSION", "1.0.1")
+BUILD_ID = os.getenv("BUILD_ID", "dev")
+
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
+        "version": APP_VERSION,
+        "build_id": BUILD_ID,
         "api_paapi_url": API_PAAPI_URL,
         "gen_content_url": GEN_CONTENT_URL,
         "default_items_per_article": DEFAULT_ITEMS_PER_ARTICLE,
