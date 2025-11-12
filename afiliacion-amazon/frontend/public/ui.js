@@ -5,8 +5,27 @@ function ensureUrl(u){
   return withProto.replace(/\/?$/, '');
 }
 
+const DEFAULT_API_BASE = 'https://frontend-api-production-060a.up.railway.app';
+
+function getApiBaseInput(){
+  return document.getElementById('api_base');
+}
+
+function loadApiBase(){
+  try{
+    const saved = localStorage.getItem('api_base');
+    if(saved && saved.trim()) return saved.trim();
+  }catch(_){}
+  return DEFAULT_API_BASE;
+}
+
+function saveApiBase(v){
+  try{ localStorage.setItem('api_base', v||''); }catch(_){}
+}
+
 async function generarArticulos() {
-  const apiBase = ensureUrl(document.getElementById('api_base').value);
+  const apiBase = ensureUrl(getApiBaseInput().value);
+  saveApiBase(apiBase);
   const busqueda = document.getElementById('busqueda').value.trim();
   const categoria = document.getElementById('categoria').value.trim();
   const num_articulos = parseInt(document.getElementById('num_articulos').value, 10) || 1;
@@ -63,7 +82,8 @@ async function generarArticulos() {
 }
 
 async function exportarXML() {
-  const apiBase = ensureUrl(document.getElementById('api_base').value);
+  const apiBase = ensureUrl(getApiBaseInput().value);
+  saveApiBase(apiBase);
   const busqueda = document.getElementById('busqueda').value.trim();
   const categoria = document.getElementById('categoria').value.trim();
   const num_articulos = parseInt(document.getElementById('num_articulos').value, 10) || 1;
@@ -118,6 +138,13 @@ function escapeHtml(str) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  const input = getApiBaseInput();
+  if(input){
+    const current = (input.value||'').trim();
+    if(!current || current.includes('localhost')){
+      input.value = loadApiBase();
+    }
+  }
   document.getElementById('btn-generar').addEventListener('click', generarArticulos);
   document.getElementById('btn-exportar').addEventListener('click', exportarXML);
 });
