@@ -10,8 +10,12 @@ import zipfile
 
 load_dotenv()
 
-app = FastAPI(title="Frontend API Orquestación",
-              description="Orquesta PAAPI y Generador de Contenidos y exporta a XML WP All Import")
+app = FastAPI(
+    title="Frontend API Orquestación",
+    description="Orquesta PAAPI y Generador de Contenidos y exporta a XML WP All Import",
+    docs_url="/docs",
+    redoc_url=None,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,28 +85,40 @@ def chunk(lst, n):
 
 
 async def buscar_productos(busqueda: str, categoria: str, total: int) -> List[Producto]:
-    params = {
-        "busqueda": busqueda,
-        "categoria": categoria,
-        "num_resultados": total,
-        "sort_by": "SalesRank",
-    }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.get(f"{API_PAAPI_URL}/buscar", params=params)
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Error PAAPI: {r.text}")
-    data = r.json()
+    # Normalizar categoria: 'All' -> "" para evitar rechazos en PAAPI
+    categoria_n = (categoria or "").strip()
+    if categoria_n.lower() == "all":
+        categoria_n = ""
+
     productos: List[Producto] = []
-    for d in data:
-        productos.append(Producto(
-            titulo=d.get("titulo", ""),
-            url_producto=d.get("url_producto", ""),
-            url_afiliado=d.get("url_afiliado", ""),
-            url_imagen=d.get("url_imagen"),
-            precio=d.get("precio"),
-            marca=d.get("marca"),
-            features=None
-        ))
+    remaining = max(1, total)
+    pagina = 1
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while remaining > 0 and pagina <= 10:  # PAAPI pagina 1..10
+            item_count = min(10, remaining)     # PAAPI máx 10 por request
+            params = {
+                "busqueda": busqueda,
+                "categoria": categoria_n,
+                "num_resultados": item_count,
+                "pagina": pagina,
+                "sort_by": "SalesRank",
+            }
+            r = await client.get(f"{API_PAAPI_URL}/buscar", params=params)
+            if r.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Error PAAPI (p{pagina} n{item_count} cat='{categoria_n}'): {r.text}")
+            data = r.json() or []
+            for d in data:
+                productos.append(Producto(
+                    titulo=d.get("titulo", ""),
+                    url_producto=d.get("url_producto", ""),
+                    url_afiliado=d.get("url_afiliado", ""),
+                    url_imagen=d.get("url_imagen"),
+                    precio=d.get("precio"),
+                    marca=d.get("marca"),
+                    features=None
+                ))
+            remaining -= len(data) if data else item_count
+            pagina += 1
     return productos
 
 
