@@ -107,6 +107,18 @@ async def buscar_productos(
             "item_count": item_count,
             "item_page": pagina,
         }
+        # Solicitar recursos necesarios para precios e imágenes
+        kwargs["resources"] = [
+            # Imágenes
+            "Images.Primary.Large",
+            "Images.Primary.Medium",
+            "Images.Primary.Small",
+            # Precios/Ofertas
+            "Offers.Listings.Price",
+            "Offers.Summaries.LowestPrice",
+            # Título y campos básicos (por si el wrapper los requiere)
+            "ItemInfo.Title",
+        ]
         if categoria and categoria.strip() and categoria.strip().lower() != "all":
             kwargs["search_index"] = categoria.strip()
         result = amazon_api.search_items(**kwargs)
@@ -178,10 +190,60 @@ async def buscar_productos(
             # Obtener precio
             precio = "Precio no disponible"
             try:
-                amount = getattr(getattr(item, 'list_price', None), 'amount', None) or getattr(getattr(item, 'price', None), 'amount', None)
-                currency = getattr(getattr(item, 'list_price', None), 'currency', None) or getattr(getattr(item, 'price', None), 'currency', None)
-                if amount and currency:
-                    precio = f"{amount} {currency}"
+                def walk_any(obj, path):
+                    cur = obj
+                    for p in path:
+                        if isinstance(p, int):
+                            if isinstance(cur, (list, tuple)) and len(cur) > p:
+                                cur = cur[p]
+                            else:
+                                return None
+                        else:
+                            cur = getattr(cur, p, None)
+                            if cur is None:
+                                return None
+                    return cur
+
+                # 1) display_amount si existe ("EUR 59,99" o similar)
+                display_candidates = [
+                    ('offers', 'listings', 0, 'price', 'display_amount'),
+                    ('offers', 'summaries', 0, 'lowest_price', 'display_amount'),
+                    ('price', 'display_amount'),
+                ]
+                for path in display_candidates:
+                    disp = walk_any(item, path)
+                    if isinstance(disp, str) and disp.strip():
+                        precio = disp.strip()
+                        break
+
+                if precio == "Precio no disponible":
+                    # 2) amount + currency
+                    amount_candidates = [
+                        ('offers', 'listings', 0, 'price', 'amount'),
+                        ('offers', 'summaries', 0, 'lowest_price', 'amount'),
+                        ('list_price', 'amount'),
+                        ('price', 'amount'),
+                    ]
+                    currency_candidates = [
+                        ('offers', 'listings', 0, 'price', 'currency'),
+                        ('offers', 'summaries', 0, 'lowest_price', 'currency'),
+                        ('list_price', 'currency'),
+                        ('price', 'currency'),
+                    ]
+                    amount = None
+                    currency = None
+                    for path in amount_candidates:
+                        v = walk_any(item, path)
+                        if v is not None:
+                            amount = v
+                            break
+                    for path in currency_candidates:
+                        v = walk_any(item, path)
+                        if v is not None:
+                            currency = v
+                            break
+                    if amount and currency:
+                        precio = f"{amount} {currency}"
             except Exception:
                 pass
             

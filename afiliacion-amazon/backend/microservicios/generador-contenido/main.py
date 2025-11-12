@@ -56,14 +56,15 @@ class GenerarArticuloResponse(BaseModel):
 
 STYLE_RULES = (
     "Actúa como redactor humano especializado en tecnología, consumo y tendencias digitales para The Objective. "
-    "Redacta 100% natural, con rigor periodístico, tono informativo y estilo editorial de medio generalista de calidad. "
-    "Evita cualquier trazo de automatización o redacción genérica. "
-    "Objetivo: ayudar a decidir una compra sin parecer una pieza publicitaria. "
-    "Tono: informativo, elegante y fluido, sin repeticiones ni frases hechas; ritmo humano con matices. "
-    "Evitar estructuras mecánicas de reseña (sin 'pros y contras', 'conclusión final' o 'guía de compra'). "
+    "Redacta 100% natural, con rigor periodístico y estilo editorial humano (ritmo variado, microanécdotas reales o plausibles, observaciones personales verificables). "
+    "Evita cualquier trazo de automatización o muletillas típicas de IA. "
+    "Objetivo: ayudar a decidir una compra sin parecer publicidad. "
+    "Tono: informativo y elegante, sin repeticiones; ritmo humano con matices. "
+    "Evitar estructuras mecánicas ('pros y contras', 'conclusión final' o 'guía de compra'). "
     "Contenido mínimo: introducción con contexto/por qué importa; explicación natural de productos, características, ventajas y diferenciadores; opinión equilibrada sutil; cierre editorial que conecte con experiencia/tendencia. "
     "Afiliación: incluir enlaces de Amazon con '?tag=theobjective-21' de forma contextual (por ejemplo: 'puede encontrarse en Amazon con descuento aquí'). "
-    "SEO: usar la palabra clave principal y 2–3 secundarias de forma orgánica; no abusar de encabezados; priorizar coherencia narrativa. "
+    "Imágenes: cuando haya URL de imagen del producto, insertar una etiqueta HTML <img src=... alt=... loading=\"lazy\" /> bajo el párrafo donde se menciona, con pie o contexto mínimo, sin galerías. "
+    "SEO: usar la palabra clave principal y 2–3 secundarias de forma orgánica; priorizar coherencia narrativa. "
     "Longitud objetivo: 600–900 palabras. Español de España."
 )
 
@@ -98,6 +99,7 @@ async def generar_articulo(req: GenerarArticuloRequest):
                 f"{idx}. {p.titulo}\n"
                 f"   Marca: {p.marca or '-'} | Precio: {p.precio or '-'}\n"
                 f"   Enlace: {p.url_afiliado}\n"
+                f"   Imagen: {p.url_imagen or '-'}\n"
                 f"   Características:\n      - {feats if feats else '-'}\n"
             )
         productos_md_str = "\n".join(productos_md) if productos_md else "(Sin productos: usa categorías por defecto)"
@@ -106,19 +108,19 @@ async def generar_articulo(req: GenerarArticuloRequest):
         keywords_sec = ", ".join(req.palabras_clave_secundarias or [])
 
         user_prompt = f"""
-Escribe un artículo listo para publicar en WordPress (sin preámbulos) sobre: {req.tema or 'selección de más vendidos'}.
+Escribe un artículo LISTO PARA PUBLICAR (HTML limpio) sobre: {req.tema or 'selección de más vendidos'}.
 Palabra clave principal: {keywords_main or '-'}
 Palabras clave secundarias: {keywords_sec or '-'}
 
-Productos disponibles (usar 1–10, de forma natural y selectiva, con enlaces contextuales):
+Productos disponibles (usa 1–10 de forma selectiva; cada uno incluye título, enlace con afiliado y, cuando exista, URL de imagen):
 {productos_md_str}
 
-Instrucciones estrictas:
-- Longitud: 600–900 palabras.
-- Mantén coherencia narrativa, evita jerarquías rígidas de encabezados; usa subtítulos sólo si fluyen de forma natural.
-- Inserta enlaces de Amazon con el parámetro de afiliado ya incluido en el texto de manera contextual (p.ej., 'puede encontrarse en Amazon con descuento aquí').
-- Integra la palabra clave principal y 2–3 secundarias de forma orgánica, sin sobreoptimizar.
-- Evita clichés, listas forzadas y cualquier rastro de automatización.
+Instrucciones estrictas de salida (cumple todas):
+- Salida en HTML semántico (párrafos <p>, subtítulos <h2>/<h3> si fluyen de forma natural; nada de Markdown).
+- Integra microanécdotas o observaciones reales/plausibles y tono humano; evita frases hechas de IA.
+- Cuando el producto tenga URL de imagen, incluye justo tras mencionarlo una etiqueta <img src="" alt="" loading="lazy" /> con alt descriptivo (marca o modelo) y proporción de párrafos natural.
+- Enlaces de Amazon: usa el enlace de afiliado proporcionado (ya contiene ?tag=theobjective-21) de forma contextual.
+- 600–900 palabras; coherencia narrativa; sin secciones mecánicas ni listados forzados.
 """
 
         client = get_openai_client()
@@ -132,6 +134,24 @@ Instrucciones estrictas:
             max_tokens=1400,
         )
         content = completion.choices[0].message.content
+
+        # Inyección defensiva de imágenes si el modelo las omitiera
+        try:
+            html = content or ""
+            for p in productos:
+                if p.url_imagen:
+                    if (p.url_imagen not in html) and (p.url_afiliado not in html):
+                        alt = (p.marca or p.titulo or "Producto").strip()[:120]
+                        figure = (
+                            f"\n<figure class=\"product-figure\">"
+                            f"<img src=\"{p.url_imagen}\" alt=\"{alt}\" loading=\"lazy\" />"
+                            f"<figcaption><a href=\"{p.url_afiliado}\">Ver en Amazon</a></figcaption>"
+                            f"</figure>\n"
+                        )
+                        html += figure
+            content = html
+        except Exception:
+            pass
 
         # Heurística simple de título/subtítulo (el contenido final ya es el cuerpo editorial)
         titulo = req.tema or "Selección de más vendidos"

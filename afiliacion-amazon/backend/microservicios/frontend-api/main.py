@@ -21,6 +21,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "frontend-api"}
+
 def _ensure_url(u: str) -> str:
     u = (u or "").strip()
     if not u:
