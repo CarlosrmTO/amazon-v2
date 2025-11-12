@@ -65,13 +65,21 @@ async function generarArticulos() {
     if (!arts.length) {
       preview.innerHTML = '<div class="alert alert-warning">No se generaron artículos.</div>';
     } else {
-      const html = arts.map((a, i) => `
+      const html = arts.map((a, i) => {
+        const links = extractAmazonLinks(a.articulo || '');
+        const buttons = links.map((u, idx) => `
+          <a class="btn btn-sm btn-primary me-2 mb-2" href="${u}" target="_blank" rel="nofollow sponsored noopener">
+            Comprar en Amazon ${links.length > 1 ? `#${idx+1}` : ''}
+          </a>
+        `).join('');
+        return `
         <div class="mb-4">
           <h4 class="mb-1">${escapeHtml(a.titulo || `Artículo ${i+1}`)}</h4>
           <div class="text-muted mb-2">${escapeHtml(a.subtitulo || '')}</div>
           <div class="border rounded p-3 bg-white" style="white-space:pre-wrap">${a.articulo}</div>
-        </div>
-      `).join('');
+          ${buttons ? `<div class=\"mt-2\">${buttons}</div>` : ''}
+        </div>`;
+      }).join('');
       preview.innerHTML = html;
     }
     status.textContent = 'Completado';
@@ -135,6 +143,33 @@ function escapeHtml(str) {
   return (str || '').replace(/[&<>"']/g, function (m) {
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'})[m];
   });
+}
+
+function extractAmazonLinks(html){
+  try{
+    const urls = new Set();
+    const doc = document.implementation.createHTMLDocument('tmp');
+    doc.body.innerHTML = html || '';
+    const anchors = doc.body.querySelectorAll('a[href]');
+    anchors.forEach(a => {
+      try{
+        const href = a.getAttribute('href') || '';
+        if(!href) return;
+        const u = new URL(href, 'https://example.com');
+        const full = u.href.replace('https://example.com','');
+        const abs = href.startsWith('http') ? href : full;
+        if(/https?:\/\/www\.amazon\.[^\s]+/i.test(abs)){
+          // Preferimos URLs con /dp/ o /gp/product/, pero aceptamos otras de Amazon
+          if(/\/(dp|gp\/product)\//i.test(abs) || /[?&]tag=/.test(abs) || /\/(s|stores)\//i.test(abs)){
+            urls.add(abs);
+          }
+        }
+      }catch(_){/* ignore parse errors */}
+    });
+    return Array.from(urls);
+  }catch(_){
+    return [];
+  }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
