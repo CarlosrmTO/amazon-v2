@@ -98,14 +98,23 @@ async def buscar_productos(busqueda: str, categoria: str, total: int) -> List[Pr
             item_count = min(10, remaining)     # PAAPI máx 10 por request
             params = {
                 "busqueda": busqueda,
-                "categoria": categoria_n,
                 "num_resultados": item_count,
                 "pagina": pagina,
-                "sort_by": "SalesRank",
             }
+            if categoria_n:
+                params["categoria"] = categoria_n
             r = await client.get(f"{API_PAAPI_URL}/buscar", params=params)
             if r.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"Error PAAPI (p{pagina} n{item_count} cat='{categoria_n}'): {r.text}")
+                # Reintento conservador: sin categoria y con n=5
+                retry_params = {
+                    "busqueda": busqueda,
+                    "num_resultados": min(5, item_count),
+                    "pagina": pagina,
+                }
+                r_retry = await client.get(f"{API_PAAPI_URL}/buscar", params=retry_params)
+                if r_retry.status_code != 200:
+                    raise HTTPException(status_code=502, detail=f"Error PAAPI (p{pagina} n{item_count} cat='{categoria_n}') and retry: {r.text} | retry: {r_retry.text}")
+                r = r_retry
             data = r.json() or []
             for d in data:
                 productos.append(Producto(
