@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from dotenv import load_dotenv
 import os
+import re
 
 # OpenAI SDK v1.x
 from openai import OpenAI
@@ -149,6 +150,16 @@ Instrucciones estrictas de salida (cumple todas):
                             f"</figure>\n"
                         )
                         html += figure
+            content = html
+        except Exception:
+            pass
+
+        # Sustituir encabezados genéricos "Producto N" por el título real del producto
+        try:
+            html = content or ""
+            for idx, p in enumerate(productos, start=1):
+                pattern = re.compile(rf'(<'+'h[2-4]'+r'[^>]*>)\s*Producto\s+'+str(idx)+r'(</'+'h[2-4]'+r'>)', re.IGNORECASE)
+                html = pattern.sub(rf"\\1{p.titulo}\\2", html)
             content = html
         except Exception:
             pass
