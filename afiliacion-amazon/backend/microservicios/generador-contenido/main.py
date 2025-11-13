@@ -3,8 +3,6 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from dotenv import load_dotenv
 import os
-import re
-import html as html_module
 
 # OpenAI SDK v1.x
 from openai import OpenAI
@@ -137,24 +135,6 @@ Instrucciones estrictas de salida (cumple todas):
         )
         content = completion.choices[0].message.content
 
-        # Normalización: quitar fences ```html, desescapar entidades y extraer <body>
-        try:
-            raw = content or ""
-            s = raw.strip()
-            if s.startswith("```"):
-                s = re.sub(r'^```[a-zA-Z]*\n?', '', s)
-                s = re.sub(r'\n?```\s*$', '', s)
-            # Si parece HTML escapado (&lt;html&gt;), desescapar
-            if "&lt;" in s and "&gt;" in s:
-                s = html_module.unescape(s)
-            # Si contiene <body>, quedarnos con su contenido
-            m = re.search(r'<body[^>]*>([\s\S]*?)</body>', s, flags=re.IGNORECASE)
-            if m:
-                s = m.group(1)
-            content = s
-        except Exception:
-            pass
-
         # Inyección defensiva de imágenes si el modelo las omitiera
         try:
             html = content or ""
@@ -169,28 +149,6 @@ Instrucciones estrictas de salida (cumple todas):
                             f"</figure>\n"
                         )
                         html += figure
-            content = html
-        except Exception:
-            pass
-
-        # Insertar un <h3> "Marca + Título" justo antes de la primera mención (imagen o enlace) si aún no aparece cerca
-        try:
-            html = content or ""
-            for p in productos:
-                display = (f"{(p.marca or '').strip()} {p.titulo}" if p.marca else p.titulo).strip()
-                if not display:
-                    continue
-                target = p.url_imagen or p.url_afiliado or p.url_producto
-                if not target:
-                    continue
-                pos = html.find(target)
-                if pos == -1:
-                    continue
-                window_start = max(0, pos - 300)
-                window = html[window_start:pos]
-                if display.lower() in window.lower():
-                    continue
-                html = html[:pos] + f"<h3>{display}</h3>" + html[pos:]
             content = html
         except Exception:
             pass
