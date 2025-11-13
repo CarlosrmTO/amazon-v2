@@ -186,7 +186,35 @@ Instrucciones estrictas de salida (cumple todas):
                     html = html[:pos] + ins + html[pos:]
                     pos += len(ins)
                 next_h = re.search(r'<h[2-4][^>]*>', html[pos:], flags=re.IGNORECASE)
-                insert_at = (pos + next_h.start()) if next_h else len(html)
+                seg_end = (pos + next_h.start()) if next_h else len(html)
+                segment = html[pos:seg_end]
+                moved = False
+                fig_m = re.search(r'<figure[^>]*>[\s\S]*?</figure>', segment, flags=re.IGNORECASE)
+                if fig_m:
+                    if fig_m.start() > 0:
+                        move_html = fig_m.group(0)
+                        segment = move_html + segment[:fig_m.start()] + segment[fig_m.end():]
+                        moved = True
+                else:
+                    img_m = re.search(r'<img[^>]*>', segment, flags=re.IGNORECASE)
+                    if img_m and img_m.start() > 0:
+                        move_html = img_m.group(0)
+                        segment = move_html + segment[:img_m.start()] + segment[img_m.end():]
+                        moved = True
+                if moved:
+                    html = html[:pos] + segment + html[seg_end:]
+                    seg_end = pos + len(segment)
+                last_p_close = segment.rfind('</p>')
+                if last_p_close != -1:
+                    insert_at = pos + last_p_close + 4
+                else:
+                    # si no hay párrafos, intentar después del cierre de <figure> o </a>
+                    fig_close = segment.find('</figure>')
+                    if fig_close != -1:
+                        insert_at = pos + fig_close + len('</figure>')
+                    else:
+                        a_close = segment.find('</a>')
+                        insert_at = (pos + a_close + 4) if a_close != -1 else seg_end
                 nearby = html[max(0, insert_at-400): insert_at + 50]
                 if 'btn-buy-amz' not in nearby:
                     link = p.url_afiliado or target_link
