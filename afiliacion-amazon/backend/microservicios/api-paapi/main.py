@@ -189,6 +189,36 @@ async def buscar_productos(
             except Exception:
                 pass
             return ""
+        def _get_title(it):
+            try:
+                def walk_any(obj, path):
+                    cur = obj
+                    for p in path:
+                        if isinstance(p, int):
+                            if isinstance(cur, (list, tuple)) and len(cur) > p:
+                                cur = cur[p]
+                            else:
+                                return None
+                        else:
+                            cur = getattr(cur, p, None)
+                            if cur is None:
+                                return None
+                    return cur
+
+                candidates = [
+                    ('item_info', 'title', 'display_value'),
+                    ('item_info', 'product_title', 'display_value'),
+                    ('title',),
+                    ('product_title',),
+                ]
+                for path in candidates:
+                    v = walk_any(it, path)
+                    if isinstance(v, str) and v.strip():
+                        return v.strip()
+            except Exception:
+                pass
+            return getattr(it, 'title', None) or getattr(it, 'product_title', None) or ''
+
         for item in items:
             # Construir URL de afiliado
             url_base = getattr(item, 'detail_page_url', '') or getattr(item, 'url', '')
@@ -264,7 +294,7 @@ async def buscar_productos(
             
             resultados.append(ProductoRespuesta(
                 asin=getattr(item, 'asin', ''),
-                titulo=(getattr(item, 'title', None) or getattr(item, 'product_title', None) or "Sin título"),
+                titulo=(_get_title(item) or "Sin título"),
                 precio=precio,
                 url_imagen=_get_image_url(item),
                 url_producto=url_base,
