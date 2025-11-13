@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from dotenv import load_dotenv
 import os
+import re
 
 # OpenAI SDK v1.x
 from openai import OpenAI
@@ -149,6 +150,59 @@ Instrucciones estrictas de salida (cumple todas):
                             f"</figure>\n"
                         )
                         html += figure
+            content = html
+        except Exception:
+            pass
+
+        try:
+            html = content or ""
+            for p in productos:
+                display = (f"{(p.marca or '').strip()} {p.titulo}" if p.marca else p.titulo).strip()
+                if not display:
+                    continue
+                target_img = p.url_imagen or ""
+                target_link = p.url_afiliado or p.url_producto or ""
+                pos = -1
+                used_img = False
+                if target_img:
+                    pos = html.find(target_img)
+                    if pos != -1:
+                        used_img = True
+                if pos == -1 and target_link:
+                    pos = html.find(target_link)
+                if pos == -1:
+                    continue
+                head_matches = list(re.finditer(r'<h([2-4])([^>]*)>(.*?)</h\1>', html[:pos], flags=re.IGNORECASE|re.DOTALL))
+                if head_matches:
+                    last = head_matches[-1]
+                    h_attrs = last.group(2)
+                    old_inner = last.group(3)
+                    new_h3 = f"<h3{h_attrs}>{display}</h3>"
+                    old_h4 = f"<h4{h_attrs}>{old_inner}</h4>"
+                    html = html[:last.start()] + new_h3 + old_h4 + html[last.end():]
+                    shift = (len(new_h3) + len(old_h4)) - (last.end() - last.start())
+                    pos += shift
+                else:
+                    ins = f"<h3>{display}</h3>"
+                    html = html[:pos] + ins + html[pos:]
+                    pos += len(ins)
+                insert_at = pos
+                if used_img:
+                    end = html.find('>', pos)
+                    if end != -1:
+                        insert_at = end + 1
+                else:
+                    a_close = html.find('</a>', pos)
+                    if a_close != -1:
+                        insert_at = a_close + 4
+                nearby = html[max(0, insert_at): insert_at + 400]
+                if 'btn-buy-amz' not in nearby:
+                    link = p.url_afiliado or target_link
+                    if link:
+                        btn = (
+                            f'<div class="mt-2"><a class="btn btn-sm btn-primary btn-buy-amz" href="{link}" target="_blank" rel="nofollow sponsored noopener">Comprar en Amazon</a></div>'
+                        )
+                        html = html[:insert_at] + btn + html[insert_at:]
             content = html
         except Exception:
             pass
