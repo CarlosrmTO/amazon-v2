@@ -185,16 +185,9 @@ Instrucciones estrictas de salida (cumple todas):
                     ins = f"<h3>{display}</h3>"
                     html = html[:pos] + ins + html[pos:]
                     pos += len(ins)
-                insert_at = pos
-                if used_img:
-                    end = html.find('>', pos)
-                    if end != -1:
-                        insert_at = end + 1
-                else:
-                    a_close = html.find('</a>', pos)
-                    if a_close != -1:
-                        insert_at = a_close + 4
-                nearby = html[max(0, insert_at): insert_at + 400]
+                next_h = re.search(r'<h[2-4][^>]*>', html[pos:], flags=re.IGNORECASE)
+                insert_at = (pos + next_h.start()) if next_h else len(html)
+                nearby = html[max(0, insert_at-400): insert_at + 50]
                 if 'btn-buy-amz' not in nearby:
                     link = p.url_afiliado or target_link
                     if link:
