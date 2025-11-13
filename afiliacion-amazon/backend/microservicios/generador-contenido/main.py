@@ -177,11 +177,9 @@ Instrucciones estrictas de salida (cumple todas):
                 if head_matches:
                     last = head_matches[-1]
                     h_attrs = last.group(2)
-                    old_inner = last.group(3)
                     new_h3 = f"<h3{h_attrs}>{display}</h3>"
-                    old_h4 = f"<h4{h_attrs}>{old_inner}</h4>"
-                    html = html[:last.start()] + new_h3 + old_h4 + html[last.end():]
-                    shift = (len(new_h3) + len(old_h4)) - (last.end() - last.start())
+                    html = html[:last.start()] + new_h3 + html[last.end():]
+                    shift = (len(new_h3)) - (last.end() - last.start())
                     pos += shift
                 else:
                     ins = f"<h3>{display}</h3>"
@@ -224,11 +222,8 @@ Instrucciones estrictas de salida (cumple todas):
                 aa = _strip_accents((a or '').strip()).lower()
                 bb = _strip_accents((b or '').strip()).lower()
                 return aa == bb
-            def _dedupe_h4(m):
-                h3_open, h3_inner, mid, h4_open, h4_inner, h4_close = m.groups()
-                keep_h4 = not _eq_loose(h3_inner, h4_inner)
-                return f"{h3_open}{h3_inner}</h3>" + (f"{mid}{h4_open}{h4_inner}{h4_close}" if keep_h4 else "")
-            html = re.sub(r'(<h3[^>]*>)([\s\S]*?)</h3>(\s*)(<h4[^>]*>)([\s\S]*?)</h4>', _dedupe_h4, html, flags=re.IGNORECASE)
+            # Eliminar cualquier H4 que siga inmediatamente a un H3 (subtítulo innecesario)
+            html = re.sub(r'(<h3[^>]*>[\s\S]*?</h3>)\s*<h4[^>]*>[\s\S]*?</h4>', r'\1', html, flags=re.IGNORECASE)
             html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
             content = html
         except Exception:
