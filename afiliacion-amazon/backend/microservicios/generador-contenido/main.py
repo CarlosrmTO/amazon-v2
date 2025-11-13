@@ -190,17 +190,22 @@ Instrucciones estrictas de salida (cumple todas):
                 segment = html[pos:seg_end]
                 moved = False
                 fig_m = re.search(r'<figure[^>]*>[\s\S]*?</figure>', segment, flags=re.IGNORECASE)
-                if fig_m:
-                    if fig_m.start() > 0:
-                        move_html = fig_m.group(0)
-                        segment = move_html + segment[:fig_m.start()] + segment[fig_m.end():]
-                        moved = True
+                if fig_m and fig_m.start() > 0:
+                    move_html = fig_m.group(0)
+                    segment = move_html + segment[:fig_m.start()] + segment[fig_m.end():]
+                    moved = True
                 else:
-                    img_m = re.search(r'<img[^>]*>', segment, flags=re.IGNORECASE)
-                    if img_m and img_m.start() > 0:
-                        move_html = img_m.group(0)
-                        segment = move_html + segment[:img_m.start()] + segment[img_m.end():]
+                    p_img_m = re.search(r'<p[^>]*>[\s\S]*?<img[^>]*>[\s\S]*?</p>', segment, flags=re.IGNORECASE)
+                    if p_img_m and p_img_m.start() > 0:
+                        move_html = p_img_m.group(0)
+                        segment = move_html + segment[:p_img_m.start()] + segment[p_img_m.end():]
                         moved = True
+                    else:
+                        img_m = re.search(r'<img[^>]*>', segment, flags=re.IGNORECASE)
+                        if img_m and img_m.start() > 0:
+                            move_html = img_m.group(0)
+                            segment = move_html + segment[:img_m.start()] + segment[img_m.end():]
+                            moved = True
                 if moved:
                     html = html[:pos] + segment + html[seg_end:]
                     seg_end = pos + len(segment)
