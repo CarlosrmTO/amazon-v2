@@ -4,6 +4,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 import os
 import re
+import unicodedata
 
 # OpenAI SDK v1.x
 from openai import OpenAI
@@ -210,6 +211,28 @@ Instrucciones estrictas de salida (cumple todas):
         # Heurística simple de título/subtítulo (el contenido final ya es el cuerpo editorial)
         titulo = req.tema or "Selección de más vendidos"
         subtitulo = "Artículo editorial para The Objective"
+
+        try:
+            html = content or ""
+            def _strip_accents(s: str) -> str:
+                try:
+                    import unicodedata
+                    return ''.join(ch for ch in unicodedata.normalize('NFD', s) if unicodedata.category(ch) != 'Mn')
+                except Exception:
+                    return s
+            def _eq_loose(a: str, b: str) -> bool:
+                aa = _strip_accents((a or '').strip()).lower()
+                bb = _strip_accents((b or '').strip()).lower()
+                return aa == bb
+            def _dedupe_h4(m):
+                h3_open, h3_inner, mid, h4_open, h4_inner, h4_close = m.groups()
+                keep_h4 = not _eq_loose(h3_inner, h4_inner)
+                return f"{h3_open}{h3_inner}</h3>" + (f"{mid}{h4_open}{h4_inner}{h4_close}" if keep_h4 else "")
+            html = re.sub(r'(<h3[^>]*>)([\s\S]*?)</h3>(\s*)(<h4[^>]*>)([\s\S]*?)</h4>', _dedupe_h4, html, flags=re.IGNORECASE)
+            html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
+            content = html
+        except Exception:
+            pass
 
         return GenerarArticuloResponse(
             titulo=titulo,
