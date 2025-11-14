@@ -219,9 +219,18 @@ Instrucciones estrictas de salida (cumple todas):
                     h3_end_new = h3_start + len(new_h3)
                     seg_start = h3_end_new
                 else:
+                    # Buscar el inicio del contenedor del primer match (p/figure/img/a)
+                    search_window = html[:pos]
+                    candidates = [
+                        search_window.rfind('<p'),
+                        search_window.rfind('<figure'),
+                        search_window.rfind('<img'),
+                        search_window.rfind('<a'),
+                    ]
+                    container_start = max([c for c in candidates if c != -1] or [pos])
                     ins = f"<h3>{display}</h3>"
-                    html = html[:pos] + ins + html[pos:]
-                    seg_start = pos + len(ins)
+                    html = html[:container_start] + ins + html[container_start:]
+                    seg_start = container_start + len(ins)
                 next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
                 seg_end = (seg_start + next_h.start()) if next_h else len(html)
                 segment = html[seg_start:seg_end]
@@ -257,8 +266,8 @@ Instrucciones estrictas de salida (cumple todas):
                     else:
                         a_close = segment.find('</a>')
                         insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
-                # Inyectar precio visible si existe
-                if p.precio:
+                # Inyectar precio visible si existe y no es "Precio no disponible"
+                if p.precio and not str(p.precio).strip().lower().startswith('precio no disponible'):
                     price_near = html[max(0, seg_start): min(len(html), seg_end)]
                     if p.precio not in price_near:
                         price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'

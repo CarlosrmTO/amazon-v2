@@ -157,6 +157,11 @@ async def generar_articulos(req: LoteRequest):
     try:
         total_items = req.num_articulos * req.items_por_articulo
         productos = await buscar_productos(req.busqueda, req.categoria, total_items)
+        # Reordenar: primero con precio disponible, luego el resto
+        def has_precio(p):
+            v = (p.precio or '').strip().lower()
+            return bool(v) and not v.startswith('precio no disponible')
+        productos = sorted(productos, key=lambda p: (not has_precio(p)))
         grupos = list(chunk(productos, req.items_por_articulo))[:req.num_articulos]
 
         articulos: List[Articulo] = []
