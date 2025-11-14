@@ -108,9 +108,38 @@ async def buscar_productos(
             "item_page": pagina,
         }
         # Nota: algunos wrappers de PAAPI ya inyectan 'resources' internamente.
-        # Evitamos pasarlo aquí para no provocar 'multiple values for keyword argument \"resources\"'.
-        if categoria and categoria.strip() and categoria.strip().lower() != "all":
-            kwargs["search_index"] = categoria.strip()
+        # Evitamos pasarlo aquí para no provocar 'multiple values for keyword argument "resources"'.
+        # Normalizar categoría: mapear nombres comunes en español a índices válidos de PAAPI
+        cat_in = (categoria or "").strip()
+        cat_l = cat_in.lower()
+        CATEGORY_MAP = {
+            "tecnologia": "Electronics",
+            "tecnología": "Electronics",
+            "electronica": "Electronics",
+            "electrónica": "Electronics",
+            "informatica": "Computers",
+            "informática": "Computers",
+            "videojuegos": "VideoGames",
+            "hogar": "HomeAndKitchen",
+            "cocina": "Kitchen",
+            "moda": "Fashion",
+            "deportes": "SportsAndOutdoors",
+            "libros": "Books",
+            "cine": "MoviesAndTV",
+            "peliculas": "MoviesAndTV",
+            "películas": "MoviesAndTV",
+            "series": "TV",
+            "juguetes": "ToysAndGames",
+        }
+        mapped = None
+        if cat_l and cat_l != "all":
+            mapped = CATEGORY_MAP.get(cat_l)
+            # Si el usuario ya pasó un índice válido (en inglés), permitirlo directamente
+            VALID_LIKE = {"Electronics","Computers","VideoGames","HomeAndKitchen","Kitchen","Fashion","SportsAndOutdoors","Books","MoviesAndTV","TV","ToysAndGames"}
+            if not mapped and cat_in in VALID_LIKE:
+                mapped = cat_in
+        if mapped:
+            kwargs["search_index"] = mapped
         try:
             result = amazon_api.search_items(**kwargs)
         except Exception as e:
@@ -281,7 +310,34 @@ async def buscar_productos(
                             currency = v
                             break
                     if amount and currency:
-                        precio = f"{amount} {currency}"
+                        try:
+                            amt = float(amount)
+                            # Formato EUR bonito
+                            if str(currency).upper() in ("EUR", "EURO", "€"):
+                                precio = f"{amt:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " €"
+                            else:
+                                precio = f"{amt:.2f} {currency}"
+                        except Exception:
+                            precio = f"{amount} {currency}"
+                
+                # 3) Enriquecer con precio de lista y ahorro si existe
+                try:
+                    list_amt = walk_any(item, ('offers','listings',0,'price','savings','basis')) or walk_any(item, ('list_price','amount'))
+                    list_cur = walk_any(item, ('list_price','currency')) or walk_any(item, ('offers','listings',0,'price','currency'))
+                    save_pct = walk_any(item, ('offers','listings',0,'price','savings','percentage'))
+                    if list_amt and list_cur:
+                        try:
+                            la = float(list_amt)
+                            if str(list_cur).upper() in ("EUR","EURO","€"):
+                                list_display = f"{la:,.2f}".replace(",","X").replace(".",",").replace("X",".") + " €"
+                            else:
+                                list_display = f"{la:.2f} {list_cur}"
+                            if precio != "Precio no disponible" and save_pct is not None:
+                                precio = f"{precio} (antes {list_display}, -{int(save_pct)}%)"
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
             except Exception:
                 pass
             
