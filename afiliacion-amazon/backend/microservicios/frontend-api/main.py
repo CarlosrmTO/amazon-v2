@@ -162,7 +162,7 @@ async def generar_articulos(req: LoteRequest):
         articulos: List[Articulo] = []
         idx = 1
         for grupo in grupos:
-            tema = req.tema or f"Selección de productos más vendidos ({req.busqueda}) #{idx}"
+            tema = req.tema or f"Selección de productos más vendidos de ({req.busqueda}) #{idx}"
             articulo = await generar_articulo(tema, grupo, req.palabra_clave_principal, req.palabras_clave_secundarias)
             articulos.append(articulo)
             idx += 1
