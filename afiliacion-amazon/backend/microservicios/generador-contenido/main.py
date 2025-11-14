@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import re
 import unicodedata
+from html import unescape as html_unescape
 
 # OpenAI SDK v1.x
 from openai import OpenAI
@@ -75,6 +76,28 @@ Eres un redactor humano de The Objective. Aplica estrictamente estas pautas edit
 {STYLE_RULES}
 """
 
+def normalize_model_html(s: str) -> str:
+    try:
+        if not s:
+            return ""
+        txt = s.strip()
+        # Remove triple backtick fences with optional language tag
+        txt = re.sub(r"^\s*```\s*html\s*\n?", "", txt, flags=re.IGNORECASE)
+        txt = re.sub(r"^\s*```\s*\n?", "", txt)
+        txt = re.sub(r"\n?```\s*$", "", txt)
+        # Remove leading standalone 'html' token
+        txt = re.sub(r"^\s*html\s*\n", "", txt, flags=re.IGNORECASE)
+        # If entire document tags present, keep body inner if available
+        m = re.search(r"<body[^>]*>([\s\S]*?)</body>", txt, flags=re.IGNORECASE)
+        if m:
+            txt = m.group(1)
+        # Unescape HTML entities if the model returned escaped tags
+        if '&lt;' in txt and '&gt;' in txt:
+            txt = html_unescape(txt)
+        return txt.strip()
+    except Exception:
+        return s or ""
+
 def ensure_affiliate(url: str, tag: str) -> str:
     if not url:
         return url
@@ -136,6 +159,9 @@ Instrucciones estrictas de salida (cumple todas):
             max_tokens=1400,
         )
         content = completion.choices[0].message.content
+
+        # Normalizar HTML del modelo para evitar "html" visible o fences
+        content = normalize_model_html(content)
 
         # Inyección defensiva de imágenes si el modelo las omitiera
         try:
