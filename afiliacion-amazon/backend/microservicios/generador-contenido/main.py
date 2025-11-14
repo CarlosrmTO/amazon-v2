@@ -101,12 +101,19 @@ def normalize_model_html(s: str) -> str:
 def ensure_affiliate(url: str, tag: str) -> str:
     if not url:
         return url
-    if "?" in url:
-        # ya tiene query, añadimos &tag=
-        if "tag=" in url:
-            return url
-        return f"{url}&tag={tag}"
-    return f"{url}?tag={tag}"
+    try:
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        u = urlparse(url)
+        q = [(k, v) for k, v in parse_qsl(u.query, keep_blank_values=True) if k.lower() != 'tag']
+        q.append(('tag', tag))
+        new_q = urlencode(q, doseq=True)
+        return urlunparse((u.scheme, u.netloc, u.path, u.params, new_q, u.fragment))
+    except Exception:
+        # Fallback simple
+        base = url.split('#',1)[0]
+        base = re.sub(r"([?&])tag=[^&]*", r"\1", base)
+        sep = '&' if '?' in base else '?'
+        return f"{base}{sep}tag={tag}"
 
 @app.post("/generar-articulo", response_model=GenerarArticuloResponse)
 async def generar_articulo(req: GenerarArticuloRequest):
@@ -200,20 +207,23 @@ Instrucciones estrictas de salida (cumple todas):
                 if pos == -1:
                     continue
                 head_matches = list(re.finditer(r'<h([2-4])([^>]*)>(.*?)</h\1>', html[:pos], flags=re.IGNORECASE|re.DOTALL))
+                # Insertar o reemplazar por H3 y fijar el inicio de segmento justo DESPUÉS del H3
                 if head_matches:
                     last = head_matches[-1]
                     h_attrs = last.group(2)
                     new_h3 = f"<h3{h_attrs}>{display}</h3>"
-                    html = html[:last.start()] + new_h3 + html[last.end():]
-                    shift = (len(new_h3)) - (last.end() - last.start())
-                    pos += shift
+                    h3_start, h3_end = last.start(), last.end()
+                    html = html[:h3_start] + new_h3 + html[h3_end:]
+                    # calcular nuevo fin del H3 tras reemplazo
+                    h3_end_new = h3_start + len(new_h3)
+                    seg_start = h3_end_new
                 else:
                     ins = f"<h3>{display}</h3>"
                     html = html[:pos] + ins + html[pos:]
-                    pos += len(ins)
-                next_h = re.search(r'<h[2-4][^>]*>', html[pos:], flags=re.IGNORECASE)
-                seg_end = (pos + next_h.start()) if next_h else len(html)
-                segment = html[pos:seg_end]
+                    seg_start = pos + len(ins)
+                next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
+                seg_end = (seg_start + next_h.start()) if next_h else len(html)
+                segment = html[seg_start:seg_end]
                 moved = False
                 fig_m = re.search(r'<figure[^>]*>[\s\S]*?</figure>', segment, flags=re.IGNORECASE)
                 if fig_m and fig_m.start() > 0:
@@ -233,8 +243,8 @@ Instrucciones estrictas de salida (cumple todas):
                             segment = move_html + segment[:img_m.start()] + segment[img_m.end():]
                             moved = True
                 if moved:
-                    html = html[:pos] + segment + html[seg_end:]
-                    seg_end = pos + len(segment)
+                    html = html[:seg_start] + segment + html[seg_end:]
+                    seg_end = seg_start + len(segment)
                 last_p_close = segment.rfind('</p>')
                 if last_p_close != -1:
                     insert_at = pos + last_p_close + 4
@@ -246,6 +256,14 @@ Instrucciones estrictas de salida (cumple todas):
                     else:
                         a_close = segment.find('</a>')
                         insert_at = (pos + a_close + 4) if a_close != -1 else seg_end
+                # Inyectar precio visible si existe
+                if p.precio:
+                    price_near = html[max(0, seg_start): min(len(html), seg_end)]
+                    if p.precio not in price_near:
+                        price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
+                        html = html[:insert_at] + price_html + html[insert_at:]
+                        insert_at += len(price_html)
+
                 nearby = html[max(0, insert_at-400): insert_at + 50]
                 if 'btn-buy-amz' not in nearby:
                     link = p.url_afiliado or target_link
