@@ -81,16 +81,17 @@ def normalize_model_html(s: str) -> str:
         if not s:
             return ""
         txt = s.strip()
-        # Remove triple backtick fences with optional language tag
-        txt = re.sub(r"^\s*```\s*html\s*\n?", "", txt, flags=re.IGNORECASE)
-        txt = re.sub(r"^\s*```\s*\n?", "", txt)
-        txt = re.sub(r"\n?```\s*$", "", txt)
-        # Remove leading standalone 'html' token
-        txt = re.sub(r"^\s*html\s*\n", "", txt, flags=re.IGNORECASE)
+        # Remove any fenced code blocks (with or without language) globally
+        txt = re.sub(r"```\s*[a-zA-Z]*\s*\n", "", txt)
+        txt = txt.replace("```", "")
+        # Remove leading standalone 'html' token before first tag
+        txt = re.sub(r"^\s*html\s*(?=<|\n)", "", txt, flags=re.IGNORECASE)
         # If entire document tags present, keep body inner if available
         m = re.search(r"<body[^>]*>([\s\S]*?)</body>", txt, flags=re.IGNORECASE)
         if m:
             txt = m.group(1)
+        # Drop a top-level <h1> the model may add and keep following content
+        txt = re.sub(r"^\s*<h1[^>]*>[\s\S]*?</h1>\s*", "", txt, flags=re.IGNORECASE)
         # Unescape HTML entities if the model returned escaped tags
         if '&lt;' in txt and '&gt;' in txt:
             txt = html_unescape(txt)
@@ -247,15 +248,15 @@ Instrucciones estrictas de salida (cumple todas):
                     seg_end = seg_start + len(segment)
                 last_p_close = segment.rfind('</p>')
                 if last_p_close != -1:
-                    insert_at = pos + last_p_close + 4
+                    insert_at = seg_start + last_p_close + 4
                 else:
                     # si no hay párrafos, intentar después del cierre de <figure> o </a>
                     fig_close = segment.find('</figure>')
                     if fig_close != -1:
-                        insert_at = pos + fig_close + len('</figure>')
+                        insert_at = seg_start + fig_close + len('</figure>')
                     else:
                         a_close = segment.find('</a>')
-                        insert_at = (pos + a_close + 4) if a_close != -1 else seg_end
+                        insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
                 # Inyectar precio visible si existe
                 if p.precio:
                     price_near = html[max(0, seg_start): min(len(html), seg_end)]
