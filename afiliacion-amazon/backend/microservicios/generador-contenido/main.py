@@ -234,27 +234,19 @@ Instrucciones estrictas de salida (cumple todas):
                 next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
                 seg_end = (seg_start + next_h.start()) if next_h else len(html)
                 segment = html[seg_start:seg_end]
-                moved = False
-                fig_m = re.search(r'<figure[^>]*>[\s\S]*?</figure>', segment, flags=re.IGNORECASE)
-                if fig_m and fig_m.start() > 0:
-                    move_html = fig_m.group(0)
-                    segment = move_html + segment[:fig_m.start()] + segment[fig_m.end():]
-                    moved = True
-                else:
-                    p_img_m = re.search(r'<p[^>]*>[\s\S]*?<img[^>]*>[\s\S]*?</p>', segment, flags=re.IGNORECASE)
-                    if p_img_m and p_img_m.start() > 0:
-                        move_html = p_img_m.group(0)
-                        segment = move_html + segment[:p_img_m.start()] + segment[p_img_m.end():]
-                        moved = True
-                    else:
-                        img_m = re.search(r'<img[^>]*>', segment, flags=re.IGNORECASE)
-                        if img_m and img_m.start() > 0:
-                            move_html = img_m.group(0)
-                            segment = move_html + segment[:img_m.start()] + segment[img_m.end():]
-                            moved = True
-                if moved:
-                    html = html[:seg_start] + segment + html[seg_end:]
-                    seg_end = seg_start + len(segment)
+                # Determinístico: tomar el PRIMER <img> (aunque esté dentro de <p>), quitarlo y colocarlo al inicio como <figure>
+                # Si ya empieza por <figure> o <img>, no hacer nada
+                if not re.match(r'^\s*<(figure|img)\b', segment, flags=re.IGNORECASE):
+                    img_any = re.search(r'<img[^>]*>', segment, flags=re.IGNORECASE)
+                    if img_any:
+                        img_tag = img_any.group(0)
+                        # Quitar el <img> del lugar original
+                        segment_wo_img = segment[:img_any.start()] + segment[img_any.end():]
+                        # Envolver como figure minimal
+                        figure = f"<figure class=\"product-figure\">{img_tag}</figure>"
+                        segment = figure + segment_wo_img
+                        html = html[:seg_start] + segment + html[seg_end:]
+                        seg_end = seg_start + len(segment)
                 last_p_close = segment.rfind('</p>')
                 if last_p_close != -1:
                     insert_at = seg_start + last_p_close + 4

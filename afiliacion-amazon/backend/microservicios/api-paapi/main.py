@@ -322,9 +322,27 @@ async def buscar_productos(
                 
                 # 3) Enriquecer con precio de lista y ahorro si existe
                 try:
-                    list_amt = walk_any(item, ('offers','listings',0,'price','savings','basis')) or walk_any(item, ('list_price','amount'))
-                    list_cur = walk_any(item, ('list_price','currency')) or walk_any(item, ('offers','listings',0,'price','currency'))
-                    save_pct = walk_any(item, ('offers','listings',0,'price','savings','percentage'))
+                    # savings puede venir como display_amount/amount/percentage
+                    list_amt = (
+                        walk_any(item, ('offers','listings',0,'price','savings','basis'))
+                        or walk_any(item, ('list_price','amount'))
+                    )
+                    list_cur = (
+                        walk_any(item, ('list_price','currency'))
+                        or walk_any(item, ('offers','listings',0,'price','currency'))
+                    )
+                    save_pct = (
+                        walk_any(item, ('offers','listings',0,'price','savings','percentage'))
+                        or walk_any(item, ('offers','summaries',0,'lowest_price','savings','percentage'))
+                    )
+                    save_display = (
+                        walk_any(item, ('offers','listings',0,'price','savings','display_amount'))
+                        or walk_any(item, ('offers','summaries',0,'lowest_price','savings','display_amount'))
+                    )
+                    save_amount = (
+                        walk_any(item, ('offers','listings',0,'price','savings','amount'))
+                        or walk_any(item, ('offers','summaries',0,'lowest_price','savings','amount'))
+                    )
                     if list_amt and list_cur:
                         try:
                             la = float(list_amt)
@@ -332,10 +350,25 @@ async def buscar_productos(
                                 list_display = f"{la:,.2f}".replace(",","X").replace(".",",").replace("X",".") + " €"
                             else:
                                 list_display = f"{la:.2f} {list_cur}"
-                            if precio != "Precio no disponible" and save_pct is not None:
-                                precio = f"{precio} (antes {list_display}, -{int(save_pct)}%)"
+                            if precio != "Precio no disponible":
+                                if save_pct is not None:
+                                    precio = f"{precio} (antes {list_display}, -{int(save_pct)}%)"
+                                elif save_display or save_amount:
+                                    try:
+                                        if save_display:
+                                            sd = str(save_display)
+                                        else:
+                                            sa = float(save_amount)
+                                            sd = f"{sa:,.2f}".replace(",","X").replace(".",",").replace("X",".") + (" €" if str(list_cur).upper() in ("EUR","EURO","€") else f" {list_cur}")
+                                        precio = f"{precio} (ahorro {sd}, antes {list_display})"
+                                    except Exception:
+                                        pass
                         except Exception:
                             pass
+                    else:
+                        # Si no tenemos list price pero tenemos porcentaje de ahorro, añadimos el porcentaje solo
+                        if precio != "Precio no disponible" and save_pct is not None:
+                            precio = f"{precio} (-{int(save_pct)}%)"
                 except Exception:
                     pass
             except Exception:
