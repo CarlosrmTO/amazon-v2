@@ -169,7 +169,11 @@ async def generar_articulo(tema: str, productos: List[Producto], kw_main: Option
 @app.post("/generar-articulos", response_model=LoteResponse)
 async def generar_articulos(req: LoteRequest):
     try:
-        total_items = req.num_articulos * req.items_por_articulo
+        # Pedimos más productos a PAAPI de los que necesitamos para poder
+        # filtrar por descuento y palabra clave sin quedarnos tan cortos.
+        # Luego recortamos a max_total más abajo.
+        max_total = req.num_articulos * req.items_por_articulo
+        total_items = min(max_total * 2, 50)
 
         # Construir keywords para PAAPI: si hay palabra_clave_principal, usamos
         # exclusivamente esa (ej. "aspiradoras"), sin añadir "black friday" u
@@ -223,7 +227,6 @@ async def generar_articulos(req: LoteRequest):
         # Distribuir los productos disponibles de forma lo más equilibrada posible
         # entre los artículos, sin repetir productos y respetando el máximo
         # items_por_articulo.
-        max_total = req.num_articulos * req.items_por_articulo
         productos = productos[:max_total]
         total_disp = len(productos)
         grupos: List[List[Producto]] = []
