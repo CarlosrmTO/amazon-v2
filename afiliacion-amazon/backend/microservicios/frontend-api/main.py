@@ -171,12 +171,12 @@ async def generar_articulos(req: LoteRequest):
     try:
         total_items = req.num_articulos * req.items_por_articulo
 
-        # Construir keywords para PAAPI: priorizar palabra_clave_principal
+        # Construir keywords para PAAPI: si hay palabra_clave_principal, usamos
+        # exclusivamente esa (ej. "aspiradoras"), sin añadir "black friday" u
+        # otros términos. Si no hay principal, usamos busqueda.
         base_kw = (req.busqueda or "").strip()
         main_kw = (req.palabra_clave_principal or "").strip()
-        if main_kw and base_kw:
-            kw_paapi = f"{main_kw} {base_kw}"
-        elif main_kw:
+        if main_kw:
             kw_paapi = main_kw
         else:
             kw_paapi = base_kw
