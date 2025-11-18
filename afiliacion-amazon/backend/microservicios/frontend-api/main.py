@@ -218,22 +218,41 @@ async def generar_articulos(req: LoteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def build_wpai_xml(articulos: List[Articulo]) -> str:
-    # XML simple compatible con WP All Import: <items><item><post_title>... etc.
+def build_wpai_xml(req: LoteRequest, articulos: List[Articulo]) -> str:
+    """Construye XML simple compatible con WP All Import.
+    El título del post se genera de forma sintética a partir de los parámetros
+    de búsqueda, para evitar restos como '#1' o '(Black Friday)'.
+    """
     from xml.sax.saxutils import escape
     xml_parts = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "<items>"]
 
-    def _clean_title(t: str) -> str:
-        s = (t or "").strip()
-        # Quitar sufijo "#N"
-        s = re.sub(r"\s+#\d+\s*$", "", s)
-        # Quitar '(Black Friday)' final, manteniendo el resto
-        s = re.sub(r"\s*\(black friday\)\s*$", "", s, flags=re.IGNORECASE)
-        return s.strip()
+    def _synthetic_title(idx: int) -> str:
+        q = (req.busqueda or "").strip()
+        kw = (req.palabra_clave_principal or "").strip()
+        q_lower = q.lower()
 
-    for a in articulos:
+        # Caso especial: Black Friday u otras promos en la búsqueda
+        if "black friday" in q_lower:
+            contexto = "Black Friday"
+            # Intentar extraer el tipo de producto de la búsqueda si no hay palabra principal
+            producto = kw or q_lower.replace("black friday", "").strip(" ,-")
+            if producto:
+                return f"Selección de {producto} más vendidos en {contexto}"
+            return f"Selección de productos más vendidos en {contexto}"
+
+        # Caso general sin Black Friday
+        if kw and q:
+            # Ej: busqueda="jabón", kw="orgánico" -> "Selección de jabón orgánico más vendidos"
+            return f"Selección de {q} {kw} más vendidos"
+        if kw:
+            return f"Selección de {kw} más vendidos"
+        if q:
+            return f"Selección de {q} más vendidos"
+        return "Selección de productos más vendidos"
+
+    for idx, a in enumerate(articulos, start=1):
         xml_parts.append("  <item>")
-        xml_parts.append(f"    <post_title>{escape(_clean_title(a.titulo))}</post_title>")
+        xml_parts.append(f"    <post_title>{escape(_synthetic_title(idx))}</post_title>")
         xml_parts.append(f"    <post_excerpt>{escape(a.subtitulo)}</post_excerpt>")
         xml_parts.append(f"    <post_content><![CDATA[{a.articulo}]]></post_content>")
         xml_parts.append("    <post_status>draft</post_status>")
@@ -252,14 +271,14 @@ class ExportResponse(BaseModel):
 @app.post("/export/wp-all-import", response_model=ExportResponse)
 async def export_wp_all_import(req: ExportRequest):
     lote = await generar_articulos(req)
-    xml = build_wpai_xml(lote.articulos)
+    xml = build_wpai_xml(req, lote.articulos)
     return ExportResponse(xml=xml)
 
 
 @app.post("/export/wp-all-import/file")
 async def export_wp_all_import_file(req: ExportRequest):
     lote = await generar_articulos(req)
-    xml = build_wpai_xml(lote.articulos)
+    xml = build_wpai_xml(req, lote.articulos)
     headers = {
         "Content-Disposition": "attachment; filename=theobjective_articulos.xml"
     }
@@ -269,7 +288,7 @@ async def export_wp_all_import_file(req: ExportRequest):
 @app.post("/export/wp-all-import/zip")
 async def export_wp_all_import_zip(req: ExportRequest):
     lote = await generar_articulos(req)
-    xml = build_wpai_xml(lote.articulos)
+    xml = build_wpai_xml(req, lote.articulos)
 
     memfile = io.BytesIO()
     with zipfile.ZipFile(memfile, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
