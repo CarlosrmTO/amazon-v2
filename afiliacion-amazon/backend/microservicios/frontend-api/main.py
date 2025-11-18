@@ -157,7 +157,18 @@ async def generar_articulo(tema: str, productos: List[Producto], kw_main: Option
 async def generar_articulos(req: LoteRequest):
     try:
         total_items = req.num_articulos * req.items_por_articulo
-        productos = await buscar_productos(req.busqueda, req.categoria, total_items)
+
+        # Construir keywords para PAAPI: priorizar palabra_clave_principal
+        base_kw = (req.busqueda or "").strip()
+        main_kw = (req.palabra_clave_principal or "").strip()
+        if main_kw and base_kw:
+            kw_paapi = f"{main_kw} {base_kw}"
+        elif main_kw:
+            kw_paapi = main_kw
+        else:
+            kw_paapi = base_kw
+
+        productos = await buscar_productos(kw_paapi, req.categoria, total_items)
         # Reordenar: primero con precio disponible, luego el resto
         def has_precio(p):
             v = (p.precio or '').strip().lower()
