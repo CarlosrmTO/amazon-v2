@@ -265,8 +265,22 @@ Instrucciones estrictas de salida (cumple todas):
                         else:
                             a_close = segment.find('</a>')
                             insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
-                # Inyectar precio visible si existe y no es "Precio no disponible"
+                # Inyectar precio visible si existe y no es "Precio no disponible".
+                # Antes de hacerlo, limpiamos cualquier línea previa de "Precio orientativo"
+                # que el modelo haya podido generar, para evitar duplicados y
+                # discrepancias de descuento.
                 if p.precio and not str(p.precio).strip().lower().startswith('precio no disponible'):
+                    # Limpiar divs previos de "Precio orientativo" en el segmento.
+                    seg_html = html[seg_start:seg_end]
+                    seg_html_clean = re.sub(
+                        r'<div[^>]*class="text-muted small"[^>]*>[^<]*Precio orientativo:[\s\S]*?</div>',
+                        '',
+                        seg_html,
+                        flags=re.IGNORECASE,
+                    )
+                    if seg_html_clean != seg_html:
+                        html = html[:seg_start] + seg_html_clean + html[seg_end:]
+                        seg_end = seg_start + len(seg_html_clean)
                     price_near = html[max(0, seg_start): min(len(html), seg_end)]
                     if p.precio not in price_near:
                         price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
