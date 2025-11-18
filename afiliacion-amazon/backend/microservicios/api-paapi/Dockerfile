@@ -1,5 +1,5 @@
-FROM python:3.11-slim
-ARG BUILD_ID=redeploy-20251114-1246
+FROM mirror.gcr.io/library/python:3.11-slim
+ARG BUILD_ID=redeploy-20251118-1108
 ENV BUILD_ID=${BUILD_ID}
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
