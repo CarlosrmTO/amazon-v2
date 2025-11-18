@@ -311,6 +311,20 @@ Instrucciones estrictas de salida (cumple todas):
                             f'</div>'
                         )
                         html = html[:insert_at] + btn + html[insert_at:]
+
+                        # Caso defensivo: si el modelo ha dejado una imagen suelta
+                        # justo DESPUÉS del botón dentro del mismo segmento, la
+                        # movemos delante del botón y la envolvemos como <figure>
+                        # para mantener el orden H3 -> imagen -> texto -> precio -> botón.
+                        seg_html = html[seg_start:seg_end]
+                        seg_html_fixed = re.sub(
+                            r'(<div class="btn-buy-amz-wrapper"[\s\S]*?</div>\s*)(<img[^>]*>)',
+                            r'<figure class="product-figure">\2</figure>\1',
+                            seg_html,
+                            flags=re.IGNORECASE,
+                        )
+                        if seg_html_fixed != seg_html:
+                            html = html[:seg_start] + seg_html_fixed + html[seg_end:]
             content = html
         except Exception:
             pass
