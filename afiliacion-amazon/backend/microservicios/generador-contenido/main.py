@@ -306,7 +306,7 @@ Instrucciones estrictas de salida (cumple todas):
                     link = p.url_afiliado or target_link
                     if link:
                         btn = (
-                            f'<div class="btn-buy-amz-wrapper" style="margin-top:0.5rem;">'
+                            f'<div class="btn-buy-amz-wrapper" style="margin-top:0.5rem;margin-bottom:1.25rem;">'
                             f'<a class="btn-buy-amz" style="display:inline-block;padding:0.35rem 0.9rem;border-radius:0.25rem;background-color:#0d6efd;color:#ffffff;text-decoration:none;font-size:0.9rem;" '
                             f'href="{link}" target="_blank" rel="nofollow sponsored noopener">Comprar en Amazon</a>'
                             f'</div>'
