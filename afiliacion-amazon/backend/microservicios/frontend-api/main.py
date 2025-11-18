@@ -90,6 +90,19 @@ def chunk(lst, n):
         yield lst[i:i + n]
 
 
+def _stem_es(word: str) -> str:
+    """Normalización muy simple para singular/plural y masculino/femenino en español.
+    No es un lematizador completo, pero ayuda a casar 'aspirador', 'aspiradora', 'aspiradores', etc.
+    """
+    w = word.lower().strip()
+    if len(w) <= 3:
+        return w
+    for suf in ("es", "as", "os", "s", "a", "o"):
+        if w.endswith(suf) and len(w) - len(suf) >= 3:
+            return w[: -len(suf)]
+    return w
+
+
 async def buscar_productos(busqueda: str, categoria: str, total: int) -> List[Producto]:
     # Normalizar categoria: 'All' -> "" para evitar rechazos en PAAPI
     categoria_n = (categoria or "").strip()
@@ -175,15 +188,20 @@ async def generar_articulos(req: LoteRequest):
             return bool(v) and not v.startswith('precio no disponible')
         productos = sorted(productos, key=lambda p: (not has_precio(p)))
 
-        # Filtrar por palabra clave principal en el título cuando exista
+        # Filtrar por palabra clave principal en el título cuando exista.
+        # Si no hay coincidencias, preferimos quedarnos sin productos antes que mezclar categorías.
         main_kw = (req.palabra_clave_principal or '').strip().lower()
         if main_kw:
             def match_main(p):
                 t = (p.titulo or '').lower()
-                return main_kw in t
-            filtrados = [p for p in productos if match_main(p)]
-            if filtrados:
-                productos = filtrados
+                # Comparamos por palabras con un stemming muy simple para cubrir
+                # singular/plural y masculino/femenino de forma genérica.
+                kw_tokens = [tok for tok in re.split(r"\W+", main_kw) if tok]
+                title_tokens = [tok for tok in re.split(r"\W+", t) if tok]
+                stem_kw = {_stem_es(tok) for tok in kw_tokens}
+                stem_title = {_stem_es(tok) for tok in title_tokens}
+                return bool(stem_kw & stem_title)
+            productos = [p for p in productos if match_main(p)]
         grupos = list(chunk(productos, req.items_por_articulo))[:req.num_articulos]
 
         articulos: List[Articulo] = []
