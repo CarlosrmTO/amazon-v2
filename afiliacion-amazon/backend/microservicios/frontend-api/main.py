@@ -188,6 +188,23 @@ async def generar_articulos(req: LoteRequest):
             return bool(v) and not v.startswith('precio no disponible')
         productos = sorted(productos, key=lambda p: (not has_precio(p)))
 
+        # Para este generador, priorizamos SIEMPRE productos en oferta.
+        # api-paapi ya enriquece el campo precio con cosas como
+        # "(-20%)", "antes ...", "ahorro ..." cuando hay descuento.
+        def tiene_descuento(p):
+            v = (p.precio or '').strip().lower()
+            if not v or v.startswith('precio no disponible'):
+                return False
+            return ('%' in v and '-' in v) or 'antes' in v or 'ahorro' in v
+
+        productos_con_desc = [p for p in productos if tiene_descuento(p)]
+        if productos_con_desc:
+            productos = productos_con_desc
+        else:
+            # Si no hay ningún producto con descuento, no generamos artículos;
+            # es preferible eso a hablar de ofertas con precios sin rebaja.
+            productos = []
+
         # Filtrar por palabra clave principal en el título cuando exista.
         # Si no hay coincidencias, preferimos quedarnos sin productos antes que mezclar categorías.
         main_kw = (req.palabra_clave_principal or '').strip().lower()
@@ -202,7 +219,29 @@ async def generar_articulos(req: LoteRequest):
                 stem_title = {_stem_es(tok) for tok in title_tokens}
                 return bool(stem_kw & stem_title)
             productos = [p for p in productos if match_main(p)]
-        grupos = list(chunk(productos, req.items_por_articulo))[:req.num_articulos]
+
+        # Distribuir los productos disponibles de forma lo más equilibrada posible
+        # entre los artículos, sin repetir productos y respetando el máximo
+        # items_por_articulo.
+        max_total = req.num_articulos * req.items_por_articulo
+        productos = productos[:max_total]
+        total_disp = len(productos)
+        grupos: List[List[Producto]] = []
+        if total_disp == 0:
+            grupos = []
+        else:
+            base = total_disp // req.num_articulos
+            extra = total_disp % req.num_articulos
+            idx_p = 0
+            for i in range(req.num_articulos):
+                # Número objetivo para este artículo (no superar items_por_articulo)
+                target = base + (1 if i < extra else 0)
+                target = min(target, req.items_por_articulo)
+                if target <= 0:
+                    grupos.append([])
+                    continue
+                grupos.append(productos[idx_p: idx_p + target])
+                idx_p += target
 
         articulos: List[Articulo] = []
         idx = 1

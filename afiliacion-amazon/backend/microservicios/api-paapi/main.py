@@ -256,6 +256,7 @@ async def buscar_productos(
             
             # Obtener precio
             precio = "Precio no disponible"
+            has_discount = False
             try:
                 def walk_any(obj, path):
                     cur = obj
@@ -353,6 +354,7 @@ async def buscar_productos(
                             if precio != "Precio no disponible":
                                 if save_pct is not None:
                                     precio = f"{precio} (antes {list_display}, -{int(save_pct)}%)"
+                                    has_discount = True
                                 elif save_display or save_amount:
                                     try:
                                         if save_display:
@@ -361,6 +363,7 @@ async def buscar_productos(
                                             sa = float(save_amount)
                                             sd = f"{sa:,.2f}".replace(",","X").replace(".",",").replace("X",".") + (" €" if str(list_cur).upper() in ("EUR","EURO","€") else f" {list_cur}")
                                         precio = f"{precio} (ahorro {sd}, antes {list_display})"
+                                        has_discount = True
                                     except Exception:
                                         pass
                         except Exception:
@@ -369,11 +372,15 @@ async def buscar_productos(
                         # Si no tenemos list price pero tenemos porcentaje de ahorro, añadimos el porcentaje solo
                         if precio != "Precio no disponible" and save_pct is not None:
                             precio = f"{precio} (-{int(save_pct)}%)"
+                            has_discount = True
                 except Exception:
                     pass
             except Exception:
                 pass
-            
+            # Si el producto no tiene ningún indicador de descuento, lo descartamos:
+            if not has_discount:
+                continue
+
             # Obtener marca
             marca = getattr(item, 'brand', None) or getattr(item, 'manufacturer', None)
             
