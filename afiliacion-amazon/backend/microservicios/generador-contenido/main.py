@@ -266,8 +266,11 @@ Instrucciones estrictas de salida (cumple todas):
                         html = html[:insert_at] + price_html + html[insert_at:]
                         insert_at += len(price_html)
 
-                nearby = html[max(0, insert_at-400): insert_at + 50]
-                if 'btn-buy-amz' not in nearby:
+                # Solo inyectar botón si en el segmento del producto no existe ya
+                # un botón con clase 'btn-buy-amz'. Esto evita duplicados cuando el
+                # modelo haya generado uno por su cuenta.
+                segment_after_price = html[seg_start:seg_end]
+                if 'btn-buy-amz' not in segment_after_price:
                     link = p.url_afiliado or target_link
                     if link:
                         btn = (
