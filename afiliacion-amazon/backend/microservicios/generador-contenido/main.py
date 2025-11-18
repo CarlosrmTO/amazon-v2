@@ -257,12 +257,14 @@ Instrucciones estrictas de salida (cumple todas):
                 # párrafo narrativo de precio queda por encima, y el bloque de precio
                 # orientativo + botón queda pegado al producto pero antes de la
                 # conclusión general.
-                # Si hay un párrafo narrativo de precio tipo "Este modelo está
-                # disponible en Amazon ... por 49,99 €", queremos que el
-                # bloque de "Precio orientativo" + botón vaya JUSTO después de
-                # ese párrafo. Lo detectamos primero.
+                # Si hay un párrafo narrativo de precio (con enlace a Amazon y
+                # un precio en euros), queremos que el bloque de "Precio
+                # orientativo" + botón vaya JUSTO después de ese párrafo. Lo
+                # detectamos primero de forma genérica:
+                #  - contiene "amazon." en un href
+                #  - contiene algo que parezca precio en EUR (\d,\d{2} y "€")
                 price_narrative = re.search(
-                    r'<p[^>]*>[^<]*Este modelo est[áa] disponible en Amazon[\s\S]*?</p>',
+                    r'<p[^>]*>(?:(?!</p>).)*(https?://[^"\s]*amazon\.[^"\s]*)(?:(?!</p>).)*?\d+[\.,]\d{2}\s*€[\s\S]*?</p>',
                     segment,
                     flags=re.IGNORECASE,
                 )
