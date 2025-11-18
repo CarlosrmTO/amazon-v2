@@ -174,6 +174,16 @@ async def generar_articulos(req: LoteRequest):
             v = (p.precio or '').strip().lower()
             return bool(v) and not v.startswith('precio no disponible')
         productos = sorted(productos, key=lambda p: (not has_precio(p)))
+
+        # Filtrar por palabra clave principal en el título cuando exista
+        main_kw = (req.palabra_clave_principal or '').strip().lower()
+        if main_kw:
+            def match_main(p):
+                t = (p.titulo or '').lower()
+                return main_kw in t
+            filtrados = [p for p in productos if match_main(p)]
+            if filtrados:
+                productos = filtrados
         grupos = list(chunk(productos, req.items_por_articulo))[:req.num_articulos]
 
         articulos: List[Articulo] = []
