@@ -69,7 +69,7 @@ async function generarArticulos() {
         <div class="mb-4">
           <h4 class="mb-1">${escapeHtml(a.titulo || `Artículo ${i+1}`)}</h4>
           <div class="text-muted mb-2">${escapeHtml(a.subtitulo || '')}</div>
-          <div class="border rounded p-3 bg-white" style="white-space:pre-wrap">${a.articulo}</div>
+          <div class="border rounded p-3 bg-white">${a.articulo}</div>
         </div>
       `).join('');
       preview.innerHTML = html;
