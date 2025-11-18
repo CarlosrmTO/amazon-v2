@@ -257,15 +257,28 @@ Instrucciones estrictas de salida (cumple todas):
                 # párrafo narrativo de precio queda por encima, y el bloque de precio
                 # orientativo + botón queda pegado al producto pero antes de la
                 # conclusión general.
-                # Para el último producto (no hay siguiente heading), si hay
-                # varios párrafos en el segmento, usamos el penúltimo </p> como
-                # punto de inserción, dejando el último párrafo libre para un
-                # cierre general.
-                p_closes = [m.start() for m in re.finditer(r'</p>', segment, flags=re.IGNORECASE)]
-                if not next_h and len(p_closes) >= 2:
-                    last_p_close = p_closes[-2]
+                # Si hay un párrafo narrativo de precio tipo "Este modelo está
+                # disponible en Amazon ... por 49,99 €", queremos que el
+                # bloque de "Precio orientativo" + botón vaya JUSTO después de
+                # ese párrafo. Lo detectamos primero.
+                price_narrative = re.search(
+                    r'<p[^>]*>[^<]*Este modelo est[áa] disponible en Amazon[\s\S]*?</p>',
+                    segment,
+                    flags=re.IGNORECASE,
+                )
+                if price_narrative:
+                    # insert_at irá tras este párrafo concreto
+                    last_p_close = price_narrative.end() - len('</p>')
                 else:
-                    last_p_close = p_closes[-1] if p_closes else -1
+                    # Para el último producto (no hay siguiente heading), si hay
+                    # varios párrafos en el segmento, usamos el penúltimo </p>
+                    # como punto de inserción, dejando el último párrafo libre
+                    # para un cierre general.
+                    p_closes = [m.start() for m in re.finditer(r'</p>', segment, flags=re.IGNORECASE)]
+                    if not next_h and len(p_closes) >= 2:
+                        last_p_close = p_closes[-2]
+                    else:
+                        last_p_close = p_closes[-1] if p_closes else -1
 
                 if last_p_close != -1:
                     insert_at = seg_start + last_p_close + 4
