@@ -232,7 +232,22 @@ Instrucciones estrictas de salida (cumple todas):
                     html = html[:container_start] + ins + html[container_start:]
                     seg_start = container_start + len(ins)
                 next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
-                seg_end = (seg_start + next_h.start()) if next_h else len(html)
+                # Detectar un posible párrafo de cierre general tipo "En resumen"
+                resumen_match = re.search(r'<p[^>]*>\s*En resumen', html[seg_start:], flags=re.IGNORECASE)
+                if next_h:
+                    next_h_pos = seg_start + next_h.start()
+                else:
+                    next_h_pos = len(html)
+                if resumen_match:
+                    resumen_pos = seg_start + resumen_match.start()
+                else:
+                    resumen_pos = None
+
+                if resumen_pos is not None and resumen_pos < next_h_pos:
+                    seg_end = resumen_pos
+                else:
+                    seg_end = next_h_pos
+
                 segment = html[seg_start:seg_end]
                 # Determinístico: tomar el PRIMER <img> (aunque esté dentro de <p>), quitarlo y colocarlo al inicio como <figure>
                 # Si ya empieza por <figure> o <img>, no hacer nada
@@ -247,9 +262,22 @@ Instrucciones estrictas de salida (cumple todas):
                         segment = figure + segment_wo_img
                         html = html[:seg_start] + segment + html[seg_end:]
                         seg_end = seg_start + len(segment)
-                # Insertar precio/botón al final del segmento del producto, para que
-                # cualquier párrafo narrativo de precio quede por encima.
-                insert_at = seg_end
+                # Insertar precio/botón después del último párrafo del segmento del
+                # producto (entre este H3 y el siguiente H2/H3/H4). Así cualquier
+                # párrafo narrativo de precio queda por encima, y el bloque de precio
+                # orientativo + botón queda pegado al producto pero antes de la
+                # conclusión general.
+                last_p_close = segment.rfind('</p>')
+                if last_p_close != -1:
+                    insert_at = seg_start + last_p_close + 4
+                else:
+                    # si no hay párrafos, intentar después del cierre de <figure> o </a>
+                    fig_close = segment.find('</figure>')
+                    if fig_close != -1:
+                        insert_at = seg_start + fig_close + len('</figure>')
+                    else:
+                        a_close = segment.find('</a>')
+                        insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
                 # Inyectar precio visible si existe y no es "Precio no disponible".
                 # Antes de hacerlo, limpiamos cualquier línea previa de "Precio orientativo"
                 # que el modelo haya podido generar, para evitar duplicados y
