@@ -247,24 +247,9 @@ Instrucciones estrictas de salida (cumple todas):
                         segment = figure + segment_wo_img
                         html = html[:seg_start] + segment + html[seg_end:]
                         seg_end = seg_start + len(segment)
-                # Buscar primero el cierre del párrafo que contiene el enlace/imagen
-                # de este producto. Esto evita que, en el último producto, el botón
-                # se vaya al final del artículo (después de la conclusión).
-                p_after_link = html.find('</p>', pos, seg_end)
-                if p_after_link != -1:
-                    insert_at = p_after_link + 4
-                else:
-                    last_p_close = segment.rfind('</p>')
-                    if last_p_close != -1:
-                        insert_at = seg_start + last_p_close + 4
-                    else:
-                        # si no hay párrafos, intentar después del cierre de <figure> o </a>
-                        fig_close = segment.find('</figure>')
-                        if fig_close != -1:
-                            insert_at = seg_start + fig_close + len('</figure>')
-                        else:
-                            a_close = segment.find('</a>')
-                            insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
+                # Insertar precio/botón al final del segmento del producto, para que
+                # cualquier párrafo narrativo de precio quede por encima.
+                insert_at = seg_end
                 # Inyectar precio visible si existe y no es "Precio no disponible".
                 # Antes de hacerlo, limpiamos cualquier línea previa de "Precio orientativo"
                 # que el modelo haya podido generar, para evitar duplicados y
@@ -281,11 +266,9 @@ Instrucciones estrictas de salida (cumple todas):
                     if seg_html_clean != seg_html:
                         html = html[:seg_start] + seg_html_clean + html[seg_end:]
                         seg_end = seg_start + len(seg_html_clean)
-                    price_near = html[max(0, seg_start): min(len(html), seg_end)]
-                    if p.precio not in price_near:
-                        price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
-                        html = html[:insert_at] + price_html + html[insert_at:]
-                        insert_at += len(price_html)
+                    price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
+                    html = html[:insert_at] + price_html + html[insert_at:]
+                    insert_at += len(price_html)
 
                 # Solo inyectar botón si en el segmento del producto no existe ya
                 # un botón con clase 'btn-buy-amz'. Esto evita duplicados cuando el
