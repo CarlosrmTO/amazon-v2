@@ -247,17 +247,24 @@ Instrucciones estrictas de salida (cumple todas):
                         segment = figure + segment_wo_img
                         html = html[:seg_start] + segment + html[seg_end:]
                         seg_end = seg_start + len(segment)
-                last_p_close = segment.rfind('</p>')
-                if last_p_close != -1:
-                    insert_at = seg_start + last_p_close + 4
+                # Buscar primero el cierre del párrafo que contiene el enlace/imagen
+                # de este producto. Esto evita que, en el último producto, el botón
+                # se vaya al final del artículo (después de la conclusión).
+                p_after_link = html.find('</p>', pos, seg_end)
+                if p_after_link != -1:
+                    insert_at = p_after_link + 4
                 else:
-                    # si no hay párrafos, intentar después del cierre de <figure> o </a>
-                    fig_close = segment.find('</figure>')
-                    if fig_close != -1:
-                        insert_at = seg_start + fig_close + len('</figure>')
+                    last_p_close = segment.rfind('</p>')
+                    if last_p_close != -1:
+                        insert_at = seg_start + last_p_close + 4
                     else:
-                        a_close = segment.find('</a>')
-                        insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
+                        # si no hay párrafos, intentar después del cierre de <figure> o </a>
+                        fig_close = segment.find('</figure>')
+                        if fig_close != -1:
+                            insert_at = seg_start + fig_close + len('</figure>')
+                        else:
+                            a_close = segment.find('</a>')
+                            insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
                 # Inyectar precio visible si existe y no es "Precio no disponible"
                 if p.precio and not str(p.precio).strip().lower().startswith('precio no disponible'):
                     price_near = html[max(0, seg_start): min(len(html), seg_end)]
