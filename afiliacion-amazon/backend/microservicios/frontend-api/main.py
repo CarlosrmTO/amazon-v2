@@ -7,6 +7,7 @@ import httpx
 from fastapi.middleware.cors import CORSMiddleware
 import io
 import zipfile
+import re
 
 load_dotenv()
 
@@ -182,9 +183,18 @@ def build_wpai_xml(articulos: List[Articulo]) -> str:
     # XML simple compatible con WP All Import: <items><item><post_title>... etc.
     from xml.sax.saxutils import escape
     xml_parts = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "<items>"]
+
+    def _clean_title(t: str) -> str:
+        s = (t or "").strip()
+        # Quitar sufijo "#N"
+        s = re.sub(r"\s+#\d+\s*$", "", s)
+        # Quitar '(Black Friday)' final, manteniendo el resto
+        s = re.sub(r"\s*\(black friday\)\s*$", "", s, flags=re.IGNORECASE)
+        return s.strip()
+
     for a in articulos:
         xml_parts.append("  <item>")
-        xml_parts.append(f"    <post_title>{escape(a.titulo)}</post_title>")
+        xml_parts.append(f"    <post_title>{escape(_clean_title(a.titulo))}</post_title>")
         xml_parts.append(f"    <post_excerpt>{escape(a.subtitulo)}</post_excerpt>")
         xml_parts.append(f"    <post_content><![CDATA[{a.articulo}]]></post_content>")
         xml_parts.append("    <post_status>draft</post_status>")
