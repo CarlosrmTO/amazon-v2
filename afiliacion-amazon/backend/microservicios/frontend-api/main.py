@@ -71,7 +71,7 @@ class LoteRequest(BaseModel):
     tema: Optional[str] = None
     busqueda: str = Field(default="", description="keywords de búsqueda en Amazon")
     categoria: str = Field(default=DEFAULT_CATEGORY)
-    num_articulos: int = Field(default=3, ge=1, le=10)
+    num_articulos: int = Field(default=1, ge=1, le=10)
     items_por_articulo: int = Field(default=DEFAULT_ITEMS_PER_ARTICLE, ge=1, le=10)
     palabra_clave_principal: Optional[str] = None
     palabras_clave_secundarias: Optional[List[str]] = Field(default_factory=list)
