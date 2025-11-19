@@ -154,7 +154,10 @@ Productos disponibles (usa 1–10 de forma selectiva; cada uno incluye título, 
 {productos_md_str}
 
 Primero piensa un TITULAR y un SUBTÍTULO editorial breve (1 frase) para el artículo
-completo. Después redacta el cuerpo del artículo en HTML.
+completo. El subtítulo debe ser original y no repetir literalmente la primera
+frase ni un fragmento largo del primer párrafo del cuerpo: debe aportar una
+mirada o matiz propio sobre el enfoque del artículo. Después redacta el cuerpo
+del artículo en HTML.
 
 Instrucciones estrictas de salida (cumple todas):
 - Salida en HTML semántico (párrafos <p>, subtítulos <h2>/<h3> si fluyen de forma natural; nada de Markdown).
@@ -163,7 +166,8 @@ Instrucciones estrictas de salida (cumple todas):
 - Enlaces de Amazon: usa el enlace de afiliado proporcionado (ya contiene ?tag=theobjective-21) de forma contextual.
 - 600–900 palabras; coherencia narrativa; sin secciones mecánicas ni listados forzados.
 
-Formatea la salida así, usando solo HTML en el cuerpo:
+Formatea la salida así, usando solo HTML en el cuerpo (respeta las palabras
+clave en mayúsculas):
 
 TITULAR: <texto del titular>
 SUBTITULO: <texto del subtítulo breve>
@@ -188,13 +192,14 @@ CUERPO:
         subtitulo_ia = None
         body_part = raw or ""
         try:
-            m = re.search(r"TITULAR:\s*(.+)", raw)
+            # Case-insensitive, tolerando posibles tildes en SUBTITULO/SUBTÍTULO
+            m = re.search(r"^\s*titular\s*:\s*(.+)$", raw, flags=re.IGNORECASE | re.MULTILINE)
             if m:
                 titulo_model = m.group(1).strip()
-            m2 = re.search(r"SUBTITULO:\s*(.+)", raw)
+            m2 = re.search(r"^\s*subt[ií]tulo\s*:\s*(.+)$", raw, flags=re.IGNORECASE | re.MULTILINE)
             if m2:
                 subtitulo_ia = m2.group(1).strip()
-            m3 = re.search(r"CUERPO:\s*(.*)$", raw, flags=re.DOTALL)
+            m3 = re.search(r"^\s*cuerpo\s*:\s*(.*)$", raw, flags=re.IGNORECASE | re.DOTALL | re.MULTILINE)
             if m3:
                 body_part = m3.group(1).strip()
         except Exception:
