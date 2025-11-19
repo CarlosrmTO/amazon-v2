@@ -89,6 +89,7 @@ class LoteRequest(BaseModel):
 class Articulo(BaseModel):
     titulo: str
     subtitulo: str
+    subtitulo_ia: Optional[str] = None
     articulo: str
 
 class LoteResponse(BaseModel):
@@ -310,6 +311,8 @@ def build_wpai_xml(req: LoteRequest, articulos: List[Articulo]) -> str:
         xml_parts.append(f"    <post_title>{escape(_synthetic_title(idx))}</post_title>")
         xml_parts.append(f"    <post_excerpt>{escape(a.subtitulo)}</post_excerpt>")
         xml_parts.append(f"    <post_content><![CDATA[{a.articulo}]]></post_content>")
+        if a.subtitulo_ia:
+            xml_parts.append(f"    <subtitulo_ia>{escape(a.subtitulo_ia)}</subtitulo_ia>")
         # featured_image: rotamos entre las imágenes hero configuradas.
         # Si no hay ninguna configurada, simplemente no añadimos el campo.
         if heroes:

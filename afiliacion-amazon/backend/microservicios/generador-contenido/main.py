@@ -53,7 +53,12 @@ class GenerarArticuloRequest(BaseModel):
 
 class GenerarArticuloResponse(BaseModel):
     titulo: str
+    # Subtítulo fijo de metaexplicación del artículo (se mantiene para usos
+    # editoriales y de transparencia).
     subtitulo: str
+    # Subtítulo adicional generado por la IA, pensado para usarse como
+    # extracto editorial/SEO en WordPress.
+    subtitulo_ia: Optional[str] = None
     articulo: str
     resumen: Optional[str] = None
 
@@ -148,12 +153,22 @@ Palabras clave secundarias: {keywords_sec or '-'}
 Productos disponibles (usa 1–10 de forma selectiva; cada uno incluye título, enlace con afiliado y, cuando exista, URL de imagen):
 {productos_md_str}
 
+Primero piensa un TITULAR y un SUBTÍTULO editorial breve (1 frase) para el artículo
+completo. Después redacta el cuerpo del artículo en HTML.
+
 Instrucciones estrictas de salida (cumple todas):
 - Salida en HTML semántico (párrafos <p>, subtítulos <h2>/<h3> si fluyen de forma natural; nada de Markdown).
 - Integra microanécdotas o observaciones reales/plausibles y tono humano; evita frases hechas de IA.
 - Cuando el producto tenga URL de imagen, incluye justo tras mencionarlo una etiqueta <img src="" alt="" loading="lazy" /> con alt descriptivo (marca o modelo) y proporción de párrafos natural.
 - Enlaces de Amazon: usa el enlace de afiliado proporcionado (ya contiene ?tag=theobjective-21) de forma contextual.
 - 600–900 palabras; coherencia narrativa; sin secciones mecánicas ni listados forzados.
+
+Formatea la salida así, usando solo HTML en el cuerpo:
+
+TITULAR: <texto del titular>
+SUBTITULO: <texto del subtítulo breve>
+CUERPO:
+<html del artículo>
 """
 
         client = get_openai_client()
@@ -166,7 +181,26 @@ Instrucciones estrictas de salida (cumple todas):
             temperature=0.8,
             max_tokens=1400,
         )
-        content = completion.choices[0].message.content
+        raw = completion.choices[0].message.content
+
+        # Extraer titular, subtítulo IA y cuerpo a partir del formato indicado.
+        titulo_model = None
+        subtitulo_ia = None
+        body_part = raw or ""
+        try:
+            m = re.search(r"TITULAR:\s*(.+)", raw)
+            if m:
+                titulo_model = m.group(1).strip()
+            m2 = re.search(r"SUBTITULO:\s*(.+)", raw)
+            if m2:
+                subtitulo_ia = m2.group(1).strip()
+            m3 = re.search(r"CUERPO:\s*(.*)$", raw, flags=re.DOTALL)
+            if m3:
+                body_part = m3.group(1).strip()
+        except Exception:
+            pass
+
+        content = body_part
 
         # Normalizar HTML del modelo para evitar "html" visible o fences
         content = normalize_model_html(content)
@@ -257,14 +291,14 @@ Instrucciones estrictas de salida (cumple todas):
                 # párrafo narrativo de precio queda por encima, y el bloque de precio
                 # orientativo + botón queda pegado al producto pero antes de la
                 # conclusión general.
-                # Si hay un párrafo narrativo de precio (con enlace a Amazon y
-                # un precio en euros), queremos que el bloque de "Precio
-                # orientativo" + botón vaya JUSTO después de ese párrafo. Lo
-                # detectamos primero de forma genérica:
-                #  - contiene "amazon." en un href
-                #  - contiene algo que parezca precio en EUR (\d,\d{2} y "€")
+                # Si hay un párrafo narrativo de compra (con enlace a Amazon),
+                # queremos que el bloque de "Precio orientativo" + botón vaya
+                # JUSTO después de ese párrafo. No exigimos que el párrafo
+                # contenga el precio en euros para no dejar frases tipo
+                # "Puede ser adquirido en Amazon aquí..." por debajo del
+                # botón.
                 price_narrative = re.search(
-                    r'<p[^>]*>(?:(?!</p>).)*(https?://[^"\s]*amazon\.[^"\s]*)(?:(?!</p>).)*?\d+[\.,]\d{2}\s*€[\s\S]*?</p>',
+                    r'<p[^>]*>(?:(?!</p>).)*(https?://[^"\s]*amazon\.[^"\s]*)[\s\S]*?</p>',
                     segment,
                     flags=re.IGNORECASE,
                 )
@@ -344,8 +378,10 @@ Instrucciones estrictas de salida (cumple todas):
         except Exception:
             pass
 
-        # Heurística simple de título/subtítulo (el contenido final ya es el cuerpo editorial)
-        titulo = req.tema or "Selección de más vendidos"
+        # Heurística de título/subtítulos. El cuerpo final ya es el HTML
+        # editorial; el subtítulo fijo se mantiene como metaexplicación y el
+        # subtítulo IA se ha extraído del modelo si estaba disponible.
+        titulo = titulo_model or req.tema or "Selección de más vendidos"
         subtitulo = (
             "Este artículo se ha elaborado con apoyo de herramientas de análisis y generación de "
             "contenido para seleccionar y describir los productos más relevantes disponibles en Amazon."
@@ -373,6 +409,7 @@ Instrucciones estrictas de salida (cumple todas):
         return GenerarArticuloResponse(
             titulo=titulo,
             subtitulo=subtitulo,
+            subtitulo_ia=subtitulo_ia,
             articulo=content,
             resumen=None,
         )
