@@ -46,6 +46,16 @@ DEFAULT_CATEGORY = os.getenv("DEFAULT_SEARCH_INDEX", "All")
 APP_VERSION = os.getenv("APP_VERSION", "1.3.0")
 BUILD_ID = os.getenv("BUILD_ID", "dev")
 
+# Imágenes hero para featured_image en WP All Import.
+# En producción se pueden sobreescribir vía variables de entorno
+# FRONTEND_HERO_1..4 o ajustando este listado directamente.
+HERO_IMAGES = [
+    os.getenv("FRONTEND_HERO_1", "https://testing.theobjective.com/wp-content/uploads/2025/11/amazon4.jpeg"),
+    os.getenv("FRONTEND_HERO_2", "https://testing.theobjective.com/wp-content/uploads/2025/11/amazon3.jpeg"),
+    os.getenv("FRONTEND_HERO_3", "https://testing.theobjective.com/wp-content/uploads/2025/11/Amazon2-scaled.jpg"),
+    os.getenv("FRONTEND_HERO_4", "https://testing.theobjective.com/wp-content/uploads/2025/11/amazon1.jpg"),
+]
+
 @app.get("/health")
 async def health():
     return {
@@ -292,11 +302,19 @@ def build_wpai_xml(req: LoteRequest, articulos: List[Articulo]) -> str:
             return f"Selección de {q} más vendidos"
         return "Selección de productos más vendidos"
 
+    # Precalcular lista de hero válidas (no vacías) para rotación
+    heroes = [u for u in HERO_IMAGES if u]
+
     for idx, a in enumerate(articulos, start=1):
         xml_parts.append("  <item>")
         xml_parts.append(f"    <post_title>{escape(_synthetic_title(idx))}</post_title>")
         xml_parts.append(f"    <post_excerpt>{escape(a.subtitulo)}</post_excerpt>")
         xml_parts.append(f"    <post_content><![CDATA[{a.articulo}]]></post_content>")
+        # featured_image: rotamos entre las imágenes hero configuradas.
+        # Si no hay ninguna configurada, simplemente no añadimos el campo.
+        if heroes:
+            hero_url = heroes[(idx - 1) % len(heroes)]
+            xml_parts.append(f"    <featured_image>{escape(hero_url)}</featured_image>")
         # Campos auxiliares para WP All Import (evitar rellenar a mano)
         xml_parts.append("    <category>Productos recomendados</category>")
         xml_parts.append("    <tags>Amazon</tags>")
