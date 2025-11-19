@@ -346,7 +346,10 @@ Instrucciones estrictas de salida (cumple todas):
 
         # Heurística simple de título/subtítulo (el contenido final ya es el cuerpo editorial)
         titulo = req.tema or "Selección de más vendidos"
-        subtitulo = "Artículo editorial para The Objective"
+        subtitulo = (
+            "Este artículo se ha elaborado con apoyo de herramientas de análisis y generación de "
+            "contenido para seleccionar y describir los productos más relevantes disponibles en Amazon."
+        )
 
         try:
             html = content or ""
