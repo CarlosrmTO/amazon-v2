@@ -400,14 +400,20 @@ CUERPO:
                 link = p.url_afiliado or p.url_producto or ""
                 if not (img_url and link):
                     continue
-                # Si ya hay un botón para este enlace de producto, no hacemos nada.
-                if link in html and 'btn-buy-amz' in html:
-                    # Comprobación más específica: botón con este href.
-                    pattern_btn = re.compile(r'<a[^>]+class="btn-buy-amz"[^>]+href="' + re.escape(link) + '"', flags=re.IGNORECASE)
-                    if pattern_btn.search(html):
-                        continue
                 img_match = re.search(r'<img[^>]+src="' + re.escape(img_url) + r'"[^>]*>', html, flags=re.IGNORECASE)
                 if not img_match:
+                    continue
+                # Rango local alrededor de la imagen para evitar duplicar botones
+                # del MISMO producto, pero permitir que el mismo href aparezca
+                # en otros bloques.
+                local_start = max(0, img_match.start() - 500)
+                local_end = min(len(html), img_match.end() + 800)
+                local_html = html[local_start:local_end]
+                pattern_btn_local = re.compile(
+                    r'<a[^>]+class="btn-buy-amz"[^>]+href="' + re.escape(link) + '"',
+                    flags=re.IGNORECASE,
+                )
+                if pattern_btn_local.search(local_html):
                     continue
                 insert_at = img_match.end()
                 price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
