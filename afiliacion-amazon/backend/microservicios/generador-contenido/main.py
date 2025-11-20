@@ -440,8 +440,10 @@ CUERPO:
                 if not (link and img_url and display):
                     continue
                 # localizar párrafo principal con el enlace de Amazon del producto
+                # Permitimos contenido arbitrario dentro del <p> antes del href,
+                # ya que suele haber <strong> u otras etiquetas.
                 pat_p = re.compile(
-                    r'<p[^>]*>[^<]*href="' + re.escape(link) + r'"[\s\S]*?</p>',
+                    r'<p[^>]*>[\s\S]*?href="' + re.escape(link) + r'"[\s\S]*?</p>',
                     flags=re.IGNORECASE,
                 )
                 m_p = pat_p.search(html)
