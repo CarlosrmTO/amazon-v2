@@ -386,6 +386,42 @@ CUERPO:
         except Exception:
             pass
 
+        # Fallback adicional: si por la estructura del HTML del modelo algún
+        # producto no ha recibido botón dentro de su segmento (por ejemplo,
+        # artículos con solo párrafos e imágenes sin headings claros),
+        # intentamos al menos colocar un bloque de precio + botón justo después
+        # de su imagen principal.
+        try:
+            html = content or ""
+            for p in productos:
+                if not (p.precio and not str(p.precio).strip().lower().startswith("precio no disponible")):
+                    continue
+                img_url = p.url_imagen or ""
+                link = p.url_afiliado or p.url_producto or ""
+                if not (img_url and link):
+                    continue
+                # Si ya hay un botón para este enlace de producto, no hacemos nada.
+                if link in html and 'btn-buy-amz' in html:
+                    # Comprobación más específica: botón con este href.
+                    pattern_btn = re.compile(r'<a[^>]+class="btn-buy-amz"[^>]+href="' + re.escape(link) + '"', flags=re.IGNORECASE)
+                    if pattern_btn.search(html):
+                        continue
+                img_match = re.search(r'<img[^>]+src="' + re.escape(img_url) + r'"[^>]*>', html, flags=re.IGNORECASE)
+                if not img_match:
+                    continue
+                insert_at = img_match.end()
+                price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
+                btn = (
+                    f'<div class="btn-buy-amz-wrapper" style="margin-top:0.5rem;margin-bottom:1.25rem;">'
+                    f'<a class="btn-buy-amz" style="display:inline-block;padding:0.35rem 0.9rem;border-radius:0.25rem;background-color:rgb(251,225,11);color:#000000;text-decoration:none;font-size:0.9rem;" '
+                    f'href="{link}" target="_blank" rel="nofollow sponsored noopener">Comprar en Amazon</a>'
+                    f'</div>'
+                )
+                html = html[:insert_at] + price_html + btn + html[insert_at:]
+            content = html
+        except Exception:
+            pass
+
         # Heurística de título/subtítulos. El cuerpo final ya es el HTML
         # editorial; el subtítulo fijo se mantiene como metaexplicación y el
         # subtítulo IA se ha extraído del modelo si estaba disponible.
