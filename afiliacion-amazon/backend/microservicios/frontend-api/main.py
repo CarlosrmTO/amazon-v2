@@ -205,12 +205,16 @@ async def generar_articulos(req: LoteRequest):
 
         # Para este generador, priorizamos SIEMPRE productos en oferta.
         # api-paapi ya enriquece el campo precio con cosas como
-        # "(-20%)", "antes ...", "ahorro ..." cuando hay descuento.
+        # "(-20%)", "20%", "antes ...", "ahorro ..." cuando hay descuento.
+        # Consideramos que hay descuento si el texto del precio contiene "%"
+        # (porcentaje) o palabras como "antes"/"ahorro".
         def tiene_descuento(p):
             v = (p.precio or '').strip().lower()
             if not v or v.startswith('precio no disponible'):
                 return False
-            return ('%' in v and '-' in v) or 'antes' in v or 'ahorro' in v
+            if '%' in v:
+                return True
+            return 'antes' in v or 'ahorro' in v
 
         productos_con_desc = [p for p in productos if tiene_descuento(p)]
         if productos_con_desc:
