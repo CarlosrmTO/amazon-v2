@@ -428,6 +428,49 @@ CUERPO:
         except Exception:
             pass
 
+        # Pasada final: forzar por producto el orden H2 (título) -> imagen ->
+        # párrafo principal (el que contiene el enlace de Amazon). El bloque de
+        # precio + botón ya está anclado tras la imagen y no se toca.
+        try:
+            html = content or ""
+            for p in productos:
+                link = p.url_afiliado or p.url_producto or ""
+                img_url = p.url_imagen or ""
+                display = (f"{(p.marca or '').strip()} {p.titulo}" if p.marca else p.titulo).strip()
+                if not (link and img_url and display):
+                    continue
+                # localizar párrafo principal con el enlace de Amazon del producto
+                pat_p = re.compile(
+                    r'<p[^>]*>[^<]*href="' + re.escape(link) + r'"[\s\S]*?</p>',
+                    flags=re.IGNORECASE,
+                )
+                m_p = pat_p.search(html)
+                if not m_p:
+                    continue
+                # localizar imagen de este producto DESPUÉS del párrafo
+                after_p = html[m_p.end():]
+                m_img_rel = re.search(r'<img[^>]+src="' + re.escape(img_url) + r'"[^>]*>', after_p, flags=re.IGNORECASE)
+                if not m_img_rel:
+                    continue
+                img_start = m_p.end() + m_img_rel.start()
+                img_end = m_p.end() + m_img_rel.end()
+
+                before = html[:m_p.start()]
+                between_p_img = html[m_p.end():img_start]
+                after_img = html[img_end:]
+                p_html = html[m_p.start():m_p.end()]
+                img_html = html[img_start:img_end]
+                h2_html = f'<h2>{display}</h2>'
+
+                # Nuevo bloque: H2 + imagen + párrafo (más cualquier pequeño
+                # contenido intermedio original entre p e img).
+                new_block = h2_html + img_html + p_html + between_p_img
+                html = before + new_block + after_img
+
+            content = html
+        except Exception:
+            pass
+
         # Heurística de título/subtítulos. El cuerpo final ya es el HTML
         # editorial; el subtítulo fijo se mantiene como metaexplicación y el
         # subtítulo IA se ha extraído del modelo si estaba disponible.
