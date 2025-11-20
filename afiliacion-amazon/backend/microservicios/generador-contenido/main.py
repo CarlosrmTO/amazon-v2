@@ -449,6 +449,26 @@ CUERPO:
                 aa = _strip_accents((a or '').strip()).lower()
                 bb = _strip_accents((b or '').strip()).lower()
                 return aa == bb
+            # Pequeña corrección para el primer producto: si justo antes de su
+            # primera imagen hay un H2/H3 cuyo texto no coincide con su título,
+            # lo eliminamos para evitar el patrón "párrafo + H3 de otro
+            # producto + imagen+botón del primero".
+            try:
+                if productos:
+                    p0 = productos[0]
+                    if p0.url_imagen:
+                        img0 = re.search(r'<img[^>]+src="' + re.escape(p0.url_imagen) + r'"[^>]*>', html, flags=re.IGNORECASE)
+                        if img0:
+                            before = html[:img0.start()]
+                            m_h = list(re.finditer(r'<h([23])[^>]*>([\s\S]*?)</h\1>', before, flags=re.IGNORECASE))
+                            if m_h:
+                                last_h = m_h[-1]
+                                heading_text = re.sub(r'<[^>]+>', '', last_h.group(2) or '').strip()
+                                display0 = (f"{(p0.marca or '').strip()} {p0.titulo}" if p0.marca else p0.titulo).strip()
+                                if display0 and not _eq_loose(heading_text, display0):
+                                    html = html[:last_h.start()] + html[last_h.end():]
+            except Exception:
+                pass
             # Eliminar cualquier H4 que siga inmediatamente a un H3 (subtítulo innecesario)
             html = re.sub(r'(<h3[^>]*>[\s\S]*?</h3>)\s*<h4[^>]*>[\s\S]*?</h4>', r'\1', html, flags=re.IGNORECASE)
             html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
