@@ -240,27 +240,26 @@ CUERPO:
                 target_img = p.url_imagen or ""
                 target_link = p.url_afiliado or p.url_producto or ""
                 pos = -1
-                # Anclamos SIEMPRE primero por el enlace de Amazon (más estable a nivel
-                # narrativo) y solo si no se encuentra usamos la URL de imagen como
-                # referencia de respaldo. Esto evita cruzar imágenes de un producto bajo
-                # el bloque de otro cuando el modelo reutiliza imágenes o las mueve.
-                if target_link:
-                    pos = html.find(target_link)
-                if pos == -1 and target_img:
+                used_img = False
+                if target_img:
                     pos = html.find(target_img)
+                    if pos != -1:
+                        used_img = True
+                if pos == -1 and target_link:
+                    pos = html.find(target_link)
                 if pos == -1:
                     continue
                 head_matches = list(re.finditer(r'<h([2-4])([^>]*)>(.*?)</h\1>', html[:pos], flags=re.IGNORECASE|re.DOTALL))
-                # Insertar o reemplazar por H2 y fijar el inicio de segmento justo DESPUÉS del H2
+                # Insertar o reemplazar por H3 y fijar el inicio de segmento justo DESPUÉS del H3
                 if head_matches:
                     last = head_matches[-1]
                     h_attrs = last.group(2)
-                    new_h2 = f"<h2{h_attrs}>{display}</h2>"
-                    h2_start, h2_end = last.start(), last.end()
-                    html = html[:h2_start] + new_h2 + html[h2_end:]
-                    # calcular nuevo fin del H2 tras reemplazo
-                    h2_end_new = h2_start + len(new_h2)
-                    seg_start = h2_end_new
+                    new_h3 = f"<h3{h_attrs}>{display}</h3>"
+                    h3_start, h3_end = last.start(), last.end()
+                    html = html[:h3_start] + new_h3 + html[h3_end:]
+                    # calcular nuevo fin del H3 tras reemplazo
+                    h3_end_new = h3_start + len(new_h3)
+                    seg_start = h3_end_new
                 else:
                     # Buscar el inicio del contenedor del primer match (p/figure/img/a)
                     search_window = html[:pos]
@@ -271,7 +270,7 @@ CUERPO:
                         search_window.rfind('<a'),
                     ]
                     container_start = max([c for c in candidates if c != -1] or [pos])
-                    ins = f"<h2>{display}</h2>"
+                    ins = f"<h3>{display}</h3>"
                     html = html[:container_start] + ins + html[container_start:]
                     seg_start = container_start + len(ins)
                 next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
@@ -412,10 +411,11 @@ CUERPO:
             html = re.sub(r'(<h3[^>]*>[\s\S]*?</h3>)\s*<h4[^>]*>[\s\S]*?</h4>', r'\1', html, flags=re.IGNORECASE)
             html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
 
-            # Forzar target="_blank" y rel="noreferrer noopener sponsored nofollow" en todos los enlaces.
+            # Normalizar todos los enlaces <a> para que abran en nueva pestaña y
+            # lleven rel de afiliación/seguridad completo.
             def _normalize_anchor(match: re.Match) -> str:
                 attrs = match.group(1) or ""
-                # Eliminar atributos target y rel existentes
+                # Eliminar target y rel existentes para evitar combinaciones raras
                 attrs = re.sub(r"\s+target=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
                 attrs = re.sub(r"\s+rel=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
                 attrs = attrs.rstrip()
