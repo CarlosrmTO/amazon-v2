@@ -386,93 +386,6 @@ CUERPO:
         except Exception:
             pass
 
-        # Fallback adicional: si por la estructura del HTML del modelo algún
-        # producto no ha recibido botón dentro de su segmento (por ejemplo,
-        # artículos con solo párrafos e imágenes sin headings claros),
-        # intentamos al menos colocar un bloque de precio + botón justo después
-        # de su imagen principal.
-        try:
-            html = content or ""
-            for p in productos:
-                if not (p.precio and not str(p.precio).strip().lower().startswith("precio no disponible")):
-                    continue
-                img_url = p.url_imagen or ""
-                link = p.url_afiliado or p.url_producto or ""
-                if not (img_url and link):
-                    continue
-                img_match = re.search(r'<img[^>]+src="' + re.escape(img_url) + r'"[^>]*>', html, flags=re.IGNORECASE)
-                if not img_match:
-                    continue
-                # Rango local alrededor de la imagen para evitar duplicar botones
-                # del MISMO producto, pero permitir que el mismo href aparezca
-                # en otros bloques.
-                local_start = max(0, img_match.start() - 500)
-                local_end = min(len(html), img_match.end() + 800)
-                local_html = html[local_start:local_end]
-                pattern_btn_local = re.compile(
-                    r'<a[^>]+class="btn-buy-amz"[^>]+href="' + re.escape(link) + '"',
-                    flags=re.IGNORECASE,
-                )
-                if pattern_btn_local.search(local_html):
-                    continue
-                insert_at = img_match.end()
-                price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
-                btn = (
-                    f'<div class="btn-buy-amz-wrapper" style="margin-top:0.5rem;margin-bottom:1.25rem;">'
-                    f'<a class="btn-buy-amz" style="display:inline-block;padding:0.35rem 0.9rem;border-radius:0.25rem;background-color:rgb(251,225,11);color:#000000;text-decoration:none;font-size:0.9rem;" '
-                    f'href="{link}" target="_blank" rel="nofollow sponsored noopener">Comprar en Amazon</a>'
-                    f'</div>'
-                )
-                html = html[:insert_at] + price_html + btn + html[insert_at:]
-            content = html
-        except Exception:
-            pass
-
-        # Pasada final: forzar por producto el orden H2 (título) -> imagen ->
-        # párrafo principal (el que contiene el enlace de Amazon). El bloque de
-        # precio + botón ya está anclado tras la imagen y no se toca.
-        try:
-            html = content or ""
-            for p in productos:
-                link = p.url_afiliado or p.url_producto or ""
-                img_url = p.url_imagen or ""
-                display = (f"{(p.marca or '').strip()} {p.titulo}" if p.marca else p.titulo).strip()
-                if not (link and img_url and display):
-                    continue
-                # localizar párrafo principal con el enlace de Amazon del producto
-                # Permitimos contenido arbitrario dentro del <p> antes del href,
-                # ya que suele haber <strong> u otras etiquetas.
-                pat_p = re.compile(
-                    r'<p[^>]*>[\s\S]*?href="' + re.escape(link) + r'"[\s\S]*?</p>',
-                    flags=re.IGNORECASE,
-                )
-                m_p = pat_p.search(html)
-                if not m_p:
-                    continue
-                # localizar imagen de este producto DESPUÉS del párrafo
-                after_p = html[m_p.end():]
-                m_img_rel = re.search(r'<img[^>]+src="' + re.escape(img_url) + r'"[^>]*>', after_p, flags=re.IGNORECASE)
-                if not m_img_rel:
-                    continue
-                img_start = m_p.end() + m_img_rel.start()
-                img_end = m_p.end() + m_img_rel.end()
-
-                before = html[:m_p.start()]
-                between_p_img = html[m_p.end():img_start]
-                after_img = html[img_end:]
-                p_html = html[m_p.start():m_p.end()]
-                img_html = html[img_start:img_end]
-                h2_html = f'<h2>{display}</h2>'
-
-                # Nuevo bloque: H2 + imagen + párrafo (más cualquier pequeño
-                # contenido intermedio original entre p e img).
-                new_block = h2_html + img_html + p_html + between_p_img
-                html = before + new_block + after_img
-
-            content = html
-        except Exception:
-            pass
-
         # Heurística de título/subtítulos. El cuerpo final ya es el HTML
         # editorial; el subtítulo fijo se mantiene como metaexplicación y el
         # subtítulo IA se ha extraído del modelo si estaba disponible.
@@ -494,26 +407,6 @@ CUERPO:
                 aa = _strip_accents((a or '').strip()).lower()
                 bb = _strip_accents((b or '').strip()).lower()
                 return aa == bb
-            # Pequeña corrección para el primer producto: si justo antes de su
-            # primera imagen hay un H2/H3 cuyo texto no coincide con su título,
-            # lo eliminamos para evitar el patrón "párrafo + H3 de otro
-            # producto + imagen+botón del primero".
-            try:
-                if productos:
-                    p0 = productos[0]
-                    if p0.url_imagen:
-                        img0 = re.search(r'<img[^>]+src="' + re.escape(p0.url_imagen) + r'"[^>]*>', html, flags=re.IGNORECASE)
-                        if img0:
-                            before = html[:img0.start()]
-                            m_h = list(re.finditer(r'<h([23])[^>]*>([\s\S]*?)</h\1>', before, flags=re.IGNORECASE))
-                            if m_h:
-                                last_h = m_h[-1]
-                                heading_text = re.sub(r'<[^>]+>', '', last_h.group(2) or '').strip()
-                                display0 = (f"{(p0.marca or '').strip()} {p0.titulo}" if p0.marca else p0.titulo).strip()
-                                if display0 and not _eq_loose(heading_text, display0):
-                                    html = html[:last_h.start()] + html[last_h.end():]
-            except Exception:
-                pass
             # Eliminar cualquier H4 que siga inmediatamente a un H3 (subtítulo innecesario)
             html = re.sub(r'(<h3[^>]*>[\s\S]*?</h3>)\s*<h4[^>]*>[\s\S]*?</h4>', r'\1', html, flags=re.IGNORECASE)
             html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
