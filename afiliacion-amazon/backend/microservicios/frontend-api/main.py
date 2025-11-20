@@ -76,6 +76,7 @@ class Producto(BaseModel):
     precio: Optional[str] = None
     marca: Optional[str] = None
     features: Optional[List[str]] = None
+    tiene_descuento: Optional[bool] = None
 
 class LoteRequest(BaseModel):
     tema: Optional[str] = None
@@ -154,7 +155,8 @@ async def buscar_productos(busqueda: str, categoria: str, total: int) -> List[Pr
                     url_imagen=d.get("url_imagen"),
                     precio=d.get("precio"),
                     marca=d.get("marca"),
-                    features=None
+                    features=None,
+                    tiene_descuento=d.get("tiene_descuento"),
                 ))
             remaining -= len(data) if data else item_count
             pagina += 1
@@ -209,6 +211,9 @@ async def generar_articulos(req: LoteRequest):
         # Consideramos que hay descuento si el texto del precio contiene "%"
         # (porcentaje) o palabras como "antes"/"ahorro".
         def tiene_descuento(p):
+            # Si api-paapi ya ha marcado el producto como rebajado, confiamos en ese flag.
+            if getattr(p, "tiene_descuento", None) is True:
+                return True
             v = (p.precio or '').strip().lower()
             if not v or v.startswith('precio no disponible'):
                 return False
@@ -220,9 +225,18 @@ async def generar_articulos(req: LoteRequest):
         if productos_con_desc:
             productos = productos_con_desc
         else:
-            # Si no hay ningún producto con descuento, no generamos artículos;
-            # es preferible eso a hablar de ofertas con precios sin rebaja.
-            productos = []
+            # Modo especial Black Friday: algunas ofertas reales no vienen marcadas
+            # limpiamente en PAAPI. Si la búsqueda contiene "black friday" y no
+            # hemos detectado descuentos, usamos como fallback los productos que al
+            # menos tienen un precio disponible, para no quedarnos sin artículos.
+            base_kw_lower = (req.busqueda or "").strip().lower()
+            if "black friday" in base_kw_lower:
+                candidatos_fallback = [p for p in productos if has_precio(p)]
+                productos = candidatos_fallback
+            else:
+                # En el resto de casos seguimos siendo estrictos: sin descuento,
+                # preferimos no generar artículos.
+                productos = []
 
         # Filtrar por palabra clave principal en el título cuando exista.
         # Si no hay coincidencias, preferimos quedarnos sin productos antes que mezclar categorías.

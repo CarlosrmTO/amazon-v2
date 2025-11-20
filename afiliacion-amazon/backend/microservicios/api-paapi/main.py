@@ -76,6 +76,7 @@ class ProductoRespuesta(BaseModel):
     marca: Optional[str] = None
     calificacion: Optional[float] = None
     total_valoraciones: Optional[int] = None
+    tiene_descuento: Optional[bool] = None
 
 @app.get("/buscar", response_model=List[ProductoRespuesta])
 async def buscar_productos(
@@ -377,9 +378,6 @@ async def buscar_productos(
                     pass
             except Exception:
                 pass
-            # Si el producto no tiene ningún indicador de descuento, lo descartamos:
-            if not has_discount:
-                continue
 
             # Obtener marca
             marca = getattr(item, 'brand', None) or getattr(item, 'manufacturer', None)
@@ -397,7 +395,8 @@ async def buscar_productos(
                 url_afiliado=url_afiliado,
                 marca=marca,
                 calificacion=calificacion,
-                total_valoraciones=total_valoraciones
+                total_valoraciones=total_valoraciones,
+                tiene_descuento=has_discount
             ))
         
         return resultados
