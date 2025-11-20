@@ -250,16 +250,16 @@ CUERPO:
                 if pos == -1:
                     continue
                 head_matches = list(re.finditer(r'<h([2-4])([^>]*)>(.*?)</h\1>', html[:pos], flags=re.IGNORECASE|re.DOTALL))
-                # Insertar o reemplazar por H3 y fijar el inicio de segmento justo DESPUÉS del H3
+                # Insertar o reemplazar por H2 y fijar el inicio de segmento justo DESPUÉS del H2
                 if head_matches:
                     last = head_matches[-1]
                     h_attrs = last.group(2)
-                    new_h3 = f"<h3{h_attrs}>{display}</h3>"
-                    h3_start, h3_end = last.start(), last.end()
-                    html = html[:h3_start] + new_h3 + html[h3_end:]
-                    # calcular nuevo fin del H3 tras reemplazo
-                    h3_end_new = h3_start + len(new_h3)
-                    seg_start = h3_end_new
+                    new_h2 = f"<h2{h_attrs}>{display}</h2>"
+                    h2_start, h2_end = last.start(), last.end()
+                    html = html[:h2_start] + new_h2 + html[h2_end:]
+                    # calcular nuevo fin del H2 tras reemplazo
+                    h2_end_new = h2_start + len(new_h2)
+                    seg_start = h2_end_new
                 else:
                     # Buscar el inicio del contenedor del primer match (p/figure/img/a)
                     search_window = html[:pos]
@@ -270,7 +270,7 @@ CUERPO:
                         search_window.rfind('<a'),
                     ]
                     container_start = max([c for c in candidates if c != -1] or [pos])
-                    ins = f"<h3>{display}</h3>"
+                    ins = f"<h2>{display}</h2>"
                     html = html[:container_start] + ins + html[container_start:]
                     seg_start = container_start + len(ins)
                 next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
