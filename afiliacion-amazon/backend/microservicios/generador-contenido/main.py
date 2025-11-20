@@ -160,6 +160,9 @@ mirada o matiz propio sobre el enfoque del artículo. Después redacta el cuerpo
 del artículo en HTML.
 
 Instrucciones estrictas de salida (cumple todas):
+- El PRIMER PÁRRAFO debe mencionar explícitamente la palabra clave principal y/o el tema del artículo
+  (por ejemplo, "Black Friday" o "Mejores descuentos en el Black Friday Week de Amazon en cuidado personal"),
+  integrándolo de forma natural en la frase inicial para optimizar SEO y contexto para otros LLM.
 - Salida en HTML semántico (párrafos <p>, subtítulos <h2>/<h3> si fluyen de forma natural; nada de Markdown).
 - Integra microanécdotas o observaciones reales/plausibles y tono humano; evita frases hechas de IA.
 - Cuando el producto tenga URL de imagen, incluye justo tras mencionarlo una etiqueta <img src="" alt="" loading="lazy" /> con alt descriptivo (marca o modelo) y proporción de párrafos natural.
