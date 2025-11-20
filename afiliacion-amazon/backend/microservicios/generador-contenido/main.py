@@ -53,11 +53,7 @@ class GenerarArticuloRequest(BaseModel):
 
 class GenerarArticuloResponse(BaseModel):
     titulo: str
-    # Subtítulo fijo de metaexplicación del artículo (se mantiene para usos
-    # editoriales y de transparencia).
     subtitulo: str
-    # Subtítulo adicional generado por la IA, pensado para usarse como
-    # extracto editorial/SEO en WordPress.
     subtitulo_ia: Optional[str] = None
     articulo: str
     resumen: Optional[str] = None
@@ -71,7 +67,6 @@ STYLE_RULES = (
     "Evitar estructuras mecánicas ('pros y contras', 'conclusión final' o 'guía de compra'). "
     "Contenido mínimo: introducción con contexto/por qué importa; explicación natural de productos, características, ventajas y diferenciadores; opinión equilibrada sutil; cierre editorial que conecte con experiencia/tendencia. "
     "Afiliación: incluir enlaces de Amazon con '?tag=theobjective-21' de forma contextual (por ejemplo: 'puede encontrarse en Amazon con descuento aquí'). "
-    "Imágenes: cuando haya URL de imagen del producto, insertar una etiqueta HTML <img src=... alt=... loading=\"lazy\" /> bajo el párrafo donde se menciona, con pie o contexto mínimo, sin galerías. "
     "SEO: usar la palabra clave principal y 2–3 secundarias de forma orgánica; priorizar coherencia narrativa. "
     "Longitud objetivo: 600–900 palabras. Español de España."
 )
@@ -86,18 +81,10 @@ def normalize_model_html(s: str) -> str:
         if not s:
             return ""
         txt = s.strip()
-        # Remove any fenced code blocks (with or without language) globally
+        # Remove any fenced code blocks
         txt = re.sub(r"```\s*[a-zA-Z]*\s*\n", "", txt)
         txt = txt.replace("```", "")
-        # Remove leading standalone 'html' token before first tag
-        txt = re.sub(r"^\s*html\s*(?=<|\n)", "", txt, flags=re.IGNORECASE)
-        # If entire document tags present, keep body inner if available
-        m = re.search(r"<body[^>]*>([\s\S]*?)</body>", txt, flags=re.IGNORECASE)
-        if m:
-            txt = m.group(1)
-        # Drop a top-level <h1> the model may add and keep following content
-        txt = re.sub(r"^\s*<h1[^>]*>[\s\S]*?</h1>\s*", "", txt, flags=re.IGNORECASE)
-        # Unescape HTML entities if the model returned escaped tags
+        # Unescape HTML entities if needed
         if '&lt;' in txt and '&gt;' in txt:
             txt = html_unescape(txt)
         return txt.strip()
@@ -115,7 +102,6 @@ def ensure_affiliate(url: str, tag: str) -> str:
         new_q = urlencode(q, doseq=True)
         return urlunparse((u.scheme, u.netloc, u.path, u.params, new_q, u.fragment))
     except Exception:
-        # Fallback simple
         base = url.split('#',1)[0]
         base = re.sub(r"([?&])tag=[^&]*", r"\1", base)
         sep = '&' if '?' in base else '?'
@@ -124,58 +110,65 @@ def ensure_affiliate(url: str, tag: str) -> str:
 @app.post("/generar-articulo", response_model=GenerarArticuloResponse)
 async def generar_articulo(req: GenerarArticuloRequest):
     try:
-        # Limitar productos y asegurar tag
+        # 1. Preparar productos y mapa por ID
         productos = req.productos[: req.max_items]
         for p in productos:
             p.url_afiliado = ensure_affiliate(p.url_afiliado or p.url_producto, DEFAULT_AFFILIATE_TAG)
+        
+        productos_map = {str(i): p for i, p in enumerate(productos, 1)}
 
-        # Construir contexto de productos
-        productos_md = []
+        # 2. Construir contexto de entrada para el LLM
+        productos_context = []
         for idx, p in enumerate(productos, start=1):
-            feats = "\n      - ".join(p.features or [])
-            productos_md.append(
-                f"{idx}. {p.titulo}\n"
+            feats = ", ".join(p.features or [])
+            productos_context.append(
+                f"ID {idx}: {p.titulo}\n"
                 f"   Marca: {p.marca or '-'} | Precio: {p.precio or '-'}\n"
-                f"   Enlace: {p.url_afiliado}\n"
-                f"   Imagen: {p.url_imagen or '-'}\n"
-                f"   Características:\n      - {feats if feats else '-'}\n"
+                f"   Características: {feats}\n"
             )
-        productos_md_str = "\n".join(productos_md) if productos_md else "(Sin productos: usa categorías por defecto)"
+        productos_str = "\n".join(productos_context)
 
         keywords_main = req.palabra_clave_principal or (req.tema or "").strip()
         keywords_sec = ", ".join(req.palabras_clave_secundarias or [])
 
+        # 3. Prompt con estructura XML estricta
         user_prompt = f"""
-Escribe un artículo LISTO PARA PUBLICAR (HTML limpio) sobre: {req.tema or 'selección de más vendidos'}.
-Palabra clave principal: {keywords_main or '-'}
-Palabras clave secundarias: {keywords_sec or '-'}
+Escribe un artículo sobre: {req.tema or 'selección de productos'}.
+Palabra clave principal: {keywords_main}
+Palabras clave secundarias: {keywords_sec}
 
-Productos disponibles (usa 1–10 de forma selectiva; cada uno incluye título, enlace con afiliado y, cuando exista, URL de imagen):
-{productos_md_str}
+Productos disponibles (tienes {len(productos)}):
+{productos_str}
 
-Primero piensa un TITULAR y un SUBTÍTULO editorial breve (1 frase) para el artículo
-completo. El subtítulo debe ser original y no repetir literalmente la primera
-frase ni un fragmento largo del primer párrafo del cuerpo: debe aportar una
-mirada o matiz propio sobre el enfoque del artículo. Después redacta el cuerpo
-del artículo en HTML.
+INSTRUCCIONES DE ESTRUCTURA Y SALIDA (IMPORTANTE):
+No devuelvas texto libre ni Markdown. Devuelve UNICAMENTE un bloque XML con la siguiente estructura exacta:
 
-Instrucciones estrictas de salida (cumple todas):
-- El PRIMER PÁRRAFO debe mencionar explícitamente la palabra clave principal y/o el tema del artículo
-  (por ejemplo, "Black Friday" o "Mejores descuentos en el Black Friday Week de Amazon en cuidado personal"),
-  integrándolo de forma natural en la frase inicial para optimizar SEO y contexto para otros LLM.
-- Salida en HTML semántico (párrafos <p>, subtítulos <h2>/<h3> si fluyen de forma natural; nada de Markdown).
-- Integra microanécdotas o observaciones reales/plausibles y tono humano; evita frases hechas de IA.
-- Cuando el producto tenga URL de imagen, incluye justo tras mencionarlo una etiqueta <img src="" alt="" loading="lazy" /> con alt descriptivo (marca o modelo) y proporción de párrafos natural.
-- Enlaces de Amazon: usa el enlace de afiliado proporcionado (ya contiene ?tag=theobjective-21) de forma contextual.
-- 600–900 palabras; coherencia narrativa; sin secciones mecánicas ni listados forzados.
+<articulo>
+  <titular>Titulo atractivo aquí</titular>
+  <subtitulo>Subtítulo breve y original</subtitulo>
+  <intro>
+    <p>Párrafo de introducción 1 (debe incluir la palabra clave principal "{keywords_main}")...</p>
+    <p>Párrafo de introducción 2...</p>
+  </intro>
+  <items>
+    <!-- Genera un bloque <item> para CADA uno de los {len(productos)} productos, en el orden que prefieras o el dado -->
+    <item id="ID_DEL_PRODUCTO">
+       <nombre>Nombre editorial del producto</nombre>
+       <texto>
+         <p>Descripción, opinión y análisis del producto...</p>
+       </texto>
+    </item>
+  </items>
+  <cierre>
+    <p>Conclusión o cierre editorial...</p>
+  </cierre>
+</articulo>
 
-Formatea la salida así, usando solo HTML en el cuerpo (respeta las palabras
-clave en mayúsculas):
-
-TITULAR: <texto del titular>
-SUBTITULO: <texto del subtítulo breve>
-CUERPO:
-<html del artículo>
+REGLAS DE CONTENIDO:
+1. El PRIMER párrafo de <intro> debe mencionar "{keywords_main}" de forma natural.
+2. En <items>, el atributo "id" debe coincidir con el ID numérico de la lista de productos.
+3. En <texto>, usa HTML semántico (<p>, <b>, etc.) pero NO incluyas imágenes, precios, ni botones; eso lo añadirá el sistema automáticamente.
+4. Redacción humana, sin muletillas de IA.
 """
 
         client = get_openai_client()
@@ -185,259 +178,109 @@ CUERPO:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.8,
-            max_tokens=1400,
+            temperature=0.7,
+            max_tokens=2000,
         )
-        raw = completion.choices[0].message.content
+        raw_output = completion.choices[0].message.content
+        
+        # 4. Parseo del XML (Pseudo-XML con Regex para robustez)
+        raw_clean = normalize_model_html(raw_output)
+        
+        def extract_tag(tag, text, flags=re.IGNORECASE | re.DOTALL):
+            m = re.search(f"<{tag}>(.*?)</{tag}>", text, flags)
+            return m.group(1).strip() if m else None
 
-        # Extraer titular, subtítulo IA y cuerpo a partir del formato indicado.
-        titulo_model = None
-        subtitulo_ia = None
-        body_part = raw or ""
-        try:
-            # Case-insensitive, tolerando posibles tildes en SUBTITULO/SUBTÍTULO
-            m = re.search(r"^\s*titular\s*:\s*(.+)$", raw, flags=re.IGNORECASE | re.MULTILINE)
-            if m:
-                titulo_model = m.group(1).strip()
-            m2 = re.search(r"^\s*subt[ií]tulo\s*:\s*(.+)$", raw, flags=re.IGNORECASE | re.MULTILINE)
-            if m2:
-                subtitulo_ia = m2.group(1).strip()
-            m3 = re.search(r"^\s*cuerpo\s*:\s*(.*)$", raw, flags=re.IGNORECASE | re.DOTALL | re.MULTILINE)
-            if m3:
-                body_part = m3.group(1).strip()
-        except Exception:
-            pass
-
-        content = body_part
-
-        # Normalizar HTML del modelo para evitar "html" visible o fences
-        content = normalize_model_html(content)
-
-        # Inyección defensiva de imágenes si el modelo las omitiera
-        try:
-            html = content or ""
-            for p in productos:
-                if p.url_imagen:
-                    if (p.url_imagen not in html) and (p.url_afiliado not in html):
-                        alt = (p.marca or p.titulo or "Producto").strip()[:120]
-                        figure = (
-                            f"\n<figure class=\"product-figure\">"
-                            f"<img src=\"{p.url_imagen}\" alt=\"{alt}\" loading=\"lazy\" />"
-                            f"<figcaption><a href=\"{p.url_afiliado}\">Ver en Amazon</a></figcaption>"
-                            f"</figure>\n"
-                        )
-                        html += figure
-            content = html
-        except Exception:
-            pass
-
-        try:
-            html = content or ""
-            for p in productos:
-                display = (f"{(p.marca or '').strip()} {p.titulo}" if p.marca else p.titulo).strip()
-                if not display:
-                    continue
-                target_img = p.url_imagen or ""
-                target_link = p.url_afiliado or p.url_producto or ""
-                pos = -1
-                used_img = False
-                if target_img:
-                    pos = html.find(target_img)
-                    if pos != -1:
-                        used_img = True
-                if pos == -1 and target_link:
-                    pos = html.find(target_link)
-                if pos == -1:
-                    continue
-                head_matches = list(re.finditer(r'<h([2-4])([^>]*)>(.*?)</h\1>', html[:pos], flags=re.IGNORECASE|re.DOTALL))
-                # Insertar o reemplazar por H3 y fijar el inicio de segmento justo DESPUÉS del H3
-                if head_matches:
-                    last = head_matches[-1]
-                    h_attrs = last.group(2)
-                    new_h3 = f"<h3{h_attrs}>{display}</h3>"
-                    h3_start, h3_end = last.start(), last.end()
-                    html = html[:h3_start] + new_h3 + html[h3_end:]
-                    # calcular nuevo fin del H3 tras reemplazo
-                    h3_end_new = h3_start + len(new_h3)
-                    seg_start = h3_end_new
-                else:
-                    # Buscar el inicio del contenedor del primer match (p/figure/img/a)
-                    search_window = html[:pos]
-                    candidates = [
-                        search_window.rfind('<p'),
-                        search_window.rfind('<figure'),
-                        search_window.rfind('<img'),
-                        search_window.rfind('<a'),
-                    ]
-                    container_start = max([c for c in candidates if c != -1] or [pos])
-                    ins = f"<h3>{display}</h3>"
-                    html = html[:container_start] + ins + html[container_start:]
-                    seg_start = container_start + len(ins)
-                next_h = re.search(r'<h[2-4][^>]*>', html[seg_start:], flags=re.IGNORECASE)
-                if next_h:
-                    next_h_pos = seg_start + next_h.start()
-                else:
-                    next_h_pos = len(html)
-
-                seg_end = next_h_pos
-                segment = html[seg_start:seg_end]
-                # Determinístico: tomar el PRIMER <img> (aunque esté dentro de <p>), quitarlo y colocarlo al inicio como <figure>
-                # Si ya empieza por <figure> o <img>, no hacer nada
-                if not re.match(r'^\s*<(figure|img)\b', segment, flags=re.IGNORECASE):
-                    img_any = re.search(r'<img[^>]*>', segment, flags=re.IGNORECASE)
-                    if img_any:
-                        img_tag = img_any.group(0)
-                        # Quitar el <img> del lugar original
-                        segment_wo_img = segment[:img_any.start()] + segment[img_any.end():]
-                        # Envolver como figure minimal
-                        figure = f"<figure class=\"product-figure\">{img_tag}</figure>"
-                        segment = figure + segment_wo_img
-                        html = html[:seg_start] + segment + html[seg_end:]
-                        seg_end = seg_start + len(segment)
-                # Insertar precio/botón después del último párrafo del segmento del
-                # producto (entre este H3 y el siguiente H2/H3/H4). Así cualquier
-                # párrafo narrativo de precio queda por encima, y el bloque de precio
-                # orientativo + botón queda pegado al producto pero antes de la
-                # conclusión general.
-                # Si hay un párrafo narrativo de compra (con enlace a Amazon),
-                # queremos que el bloque de "Precio orientativo" + botón vaya
-                # JUSTO después de ese párrafo. No exigimos que el párrafo
-                # contenga el precio en euros para no dejar frases tipo
-                # "Puede ser adquirido en Amazon aquí..." por debajo del
-                # botón.
-                price_narrative = re.search(
-                    r'<p[^>]*>(?:(?!</p>).)*(https?://[^"\s]*amazon\.[^"\s]*)[\s\S]*?</p>',
-                    segment,
-                    flags=re.IGNORECASE,
+        titulo_model = extract_tag("titular", raw_clean) or req.tema
+        subtitulo_ia = extract_tag("subtitulo", raw_clean)
+        intro_html = extract_tag("intro", raw_clean) or ""
+        cierre_html = extract_tag("cierre", raw_clean) or ""
+        
+        # Extraer items
+        items_block_match = re.search(r"<items>(.*?)</items>", raw_clean, re.IGNORECASE | re.DOTALL)
+        items_block = items_block_match.group(1) if items_block_match else raw_clean
+        
+        items_iter = re.finditer(r'<item\s+id=["\']?(\d+)["\']?\s*>(.*?)</item>', items_block, re.IGNORECASE | re.DOTALL)
+        
+        article_body_parts = []
+        
+        if intro_html:
+            article_body_parts.append(intro_html)
+            
+        for m in items_iter:
+            pid = m.group(1)
+            content_inner = m.group(2)
+            
+            product_obj = productos_map.get(pid)
+            if not product_obj:
+                continue
+                
+            nombre_editorial = extract_tag("nombre", content_inner) or product_obj.titulo
+            texto_editorial = extract_tag("texto", content_inner) or ""
+            
+            # Construcción Determinista: H2 -> Imagen -> Texto -> Precio -> Botón
+            h2 = f"<h2>{nombre_editorial}</h2>"
+            
+            figure = ""
+            if product_obj.url_imagen:
+                alt_text = (product_obj.marca or product_obj.titulo)[:100].replace('"', '')
+                figure = (
+                    f'<figure class="product-figure">'
+                    f'<img src="{product_obj.url_imagen}" alt="{alt_text}" loading="lazy" />'
+                    f'</figure>'
                 )
-                if price_narrative:
-                    # insert_at irá tras este párrafo concreto
-                    last_p_close = price_narrative.end() - len('</p>')
-                else:
-                    # Para el último producto (no hay siguiente heading), si hay
-                    # varios párrafos en el segmento, usamos el penúltimo </p>
-                    # como punto de inserción, dejando el último párrafo libre
-                    # para un cierre general.
-                    p_closes = [m.start() for m in re.finditer(r'</p>', segment, flags=re.IGNORECASE)]
-                    if not next_h and len(p_closes) >= 2:
-                        last_p_close = p_closes[-2]
-                    else:
-                        last_p_close = p_closes[-1] if p_closes else -1
+            
+            texto_clean = re.sub(r'<div[^>]*class="btn-buy-amz[^>]*>.*?</div>', '', texto_editorial, flags=re.DOTALL)
+            
+            price_div = ""
+            if product_obj.precio and not "no disponible" in str(product_obj.precio).lower():
+                price_div = f'<div class="text-muted small">Precio orientativo: {product_obj.precio}</div>'
+            
+            btn_div = ""
+            link = product_obj.url_afiliado or product_obj.url_producto
+            if link:
+                btn_div = (
+                    f'<div class="btn-buy-amz-wrapper" style="margin-top:0.5rem;margin-bottom:1.25rem;">'
+                    f'<a class="btn-buy-amz" style="display:inline-block;padding:0.35rem 0.9rem;'
+                    f'border-radius:0.25rem;background-color:rgb(251,225,11);color:#000000;'
+                    f'text-decoration:none;font-size:0.9rem;" '
+                    f'href="{link}" target="_blank" rel="noreferrer noopener sponsored nofollow">Comprar en Amazon</a>'
+                    f'</div>'
+                )
+            
+            block_html = f"{h2}\n{figure}\n{texto_clean}\n{price_div}\n{btn_div}\n"
+            article_body_parts.append(block_html)
 
-                if last_p_close != -1:
-                    insert_at = seg_start + last_p_close + 4
-                else:
-                    # si no hay párrafos, intentar después del cierre de <figure> o </a>
-                    fig_close = segment.find('</figure>')
-                    if fig_close != -1:
-                        insert_at = seg_start + fig_close + len('</figure>')
-                    else:
-                        a_close = segment.find('</a>')
-                        insert_at = (seg_start + a_close + 4) if a_close != -1 else seg_end
-                # Inyectar precio visible si existe y no es "Precio no disponible".
-                # Antes de hacerlo, limpiamos cualquier línea previa de "Precio orientativo"
-                # que el modelo haya podido generar, para evitar duplicados y
-                # discrepancias de descuento.
-                if p.precio and not str(p.precio).strip().lower().startswith('precio no disponible'):
-                    # Limpiar divs previos de "Precio orientativo" en el segmento.
-                    seg_html = html[seg_start:seg_end]
-                    seg_html_clean = re.sub(
-                        r'<div[^>]*class="text-muted small"[^>]*>[^<]*Precio orientativo:[\s\S]*?</div>',
-                        '',
-                        seg_html,
-                        flags=re.IGNORECASE,
-                    )
-                    if seg_html_clean != seg_html:
-                        html = html[:seg_start] + seg_html_clean + html[seg_end:]
-                        seg_end = seg_start + len(seg_html_clean)
-                    price_html = f'<div class="text-muted small">Precio orientativo: {p.precio}</div>'
-                    html = html[:insert_at] + price_html + html[insert_at:]
-                    insert_at += len(price_html)
+        if cierre_html:
+            article_body_parts.append(cierre_html)
+            
+        full_html = "\n".join(article_body_parts)
+        
+        def _normalize_anchor(match: re.Match) -> str:
+            attrs = match.group(1) or ""
+            attrs = re.sub(r"\s+target=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
+            attrs = re.sub(r"\s+rel=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
+            attrs = attrs.rstrip()
+            extra = ' target="_blank" rel="noreferrer noopener sponsored nofollow"'
+            return f"<a{attrs}{extra}>"
 
-                # Solo inyectar botón si en el segmento del producto no existe ya
-                # un botón con clase 'btn-buy-amz'. Esto evita duplicados cuando el
-                # modelo haya generado uno por su cuenta.
-                segment_after_price = html[seg_start:seg_end]
-                if 'btn-buy-amz' not in segment_after_price:
-                    link = p.url_afiliado or target_link
-                    if link:
-                        btn = (
-                            f'<div class="btn-buy-amz-wrapper" style="margin-top:0.5rem;margin-bottom:1.25rem;">'
-                            f'<a class="btn-buy-amz" style="display:inline-block;padding:0.35rem 0.9rem;border-radius:0.25rem;background-color:rgb(251,225,11);color:#000000;text-decoration:none;font-size:0.9rem;" '
-                            f'href="{link}" target="_blank" rel="nofollow sponsored noopener">Comprar en Amazon</a>'
-                            f'</div>'
-                        )
-                        html = html[:insert_at] + btn + html[insert_at:]
-
-                        # Caso defensivo: si el modelo ha dejado una imagen suelta
-                        # justo DESPUÉS del botón dentro del mismo segmento, la
-                        # movemos delante del botón y la envolvemos como <figure>
-                        # para mantener el orden H3 -> imagen -> texto -> precio -> botón.
-                        seg_html = html[seg_start:seg_end]
-                        seg_html_fixed = re.sub(
-                            r'(<div class="btn-buy-amz-wrapper"[\s\S]*?</div>\s*)(<img[^>]*>)',
-                            r'<figure class="product-figure">\2</figure>\1',
-                            seg_html,
-                            flags=re.IGNORECASE,
-                        )
-                        if seg_html_fixed != seg_html:
-                            html = html[:seg_start] + seg_html_fixed + html[seg_end:]
-            content = html
-        except Exception:
-            pass
-
-        # Heurística de título/subtítulos. El cuerpo final ya es el HTML
-        # editorial; el subtítulo fijo se mantiene como metaexplicación y el
-        # subtítulo IA se ha extraído del modelo si estaba disponible.
-        titulo = titulo_model or req.tema or "Selección de más vendidos"
-        subtitulo = (
+        full_html = re.sub(r"<a([^>]*)>", _normalize_anchor, full_html, flags=re.IGNORECASE)
+        
+        subtitulo_fijo = (
             "Este artículo se ha elaborado con apoyo de herramientas de análisis y generación de "
             "contenido para seleccionar y describir los productos más relevantes disponibles en Amazon."
         )
 
-        try:
-            html = content or ""
-            def _strip_accents(s: str) -> str:
-                try:
-                    import unicodedata
-                    return ''.join(ch for ch in unicodedata.normalize('NFD', s) if unicodedata.category(ch) != 'Mn')
-                except Exception:
-                    return s
-            def _eq_loose(a: str, b: str) -> bool:
-                aa = _strip_accents((a or '').strip()).lower()
-                bb = _strip_accents((b or '').strip()).lower()
-                return aa == bb
-            # Eliminar cualquier H4 que siga inmediatamente a un H3 (subtítulo innecesario)
-            html = re.sub(r'(<h3[^>]*>[\s\S]*?</h3>)\s*<h4[^>]*>[\s\S]*?</h4>', r'\1', html, flags=re.IGNORECASE)
-            html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
-
-            # Normalizar todos los enlaces <a> para que abran en nueva pestaña y
-            # lleven rel de afiliación/seguridad completo.
-            def _normalize_anchor(match: re.Match) -> str:
-                attrs = match.group(1) or ""
-                # Eliminar target y rel existentes para evitar combinaciones raras
-                attrs = re.sub(r"\s+target=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
-                attrs = re.sub(r"\s+rel=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
-                attrs = attrs.rstrip()
-                extra = ' target="_blank" rel="noreferrer noopener sponsored nofollow"'
-                if attrs:
-                    return f"<a{attrs}{extra}>"
-                return f"<a{extra}>"
-
-            html = re.sub(r"<a([^>]*)>", _normalize_anchor, html, flags=re.IGNORECASE)
-
-            content = html
-        except Exception:
-            pass
-
         return GenerarArticuloResponse(
-            titulo=titulo,
-            subtitulo=subtitulo,
+            titulo=titulo_model or "Artículo Recomendado",
+            subtitulo=subtitulo_fijo,
             subtitulo_ia=subtitulo_ia,
-            articulo=content,
+            articulo=full_html,
             resumen=None,
         )
+
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

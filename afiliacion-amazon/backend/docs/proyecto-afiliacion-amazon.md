@@ -197,6 +197,120 @@ las definitivas sin tocar código.
 
 ---
 
+## 8. Estado actual de `generador-contenido` y refactor pendiente de layout
+
+> **Contexto (20/11/2025):** Tras varias regresiones de layout se ha vuelto a una
+> versión estable y se ha creado una rama específica para refactorizar el layout
+> de productos sin tocar `main`.
+
+### 8.1 Versiones y ramas
+
+- **Fichero clave**: `backend/microservicios/generador-contenido/main.py`.
+- **Versión estable en `main`**: commit `35bc9e9` (`GC: rollback a 1.4 + primer parrafo SEO y normalizacion de enlaces`).
+- **Tag de release estable**: `gc-v1.4-estable-20251120` apunta a esa versión.
+- **Rollback exacto**: commit `d87bb83` vuelve el fichero a `35bc9e9` después de los
+  experimentos de layout.
+- **Rama de trabajo para el refactor**: `gc-layout-refactor`, creada desde el
+  estado estable. Cualquier cambio de layout debe hacerse aquí y solo pasarse a
+  `main` cuando esté probado.
+
+### 8.2 Qué hace ahora la versión estable (35bc9e9)
+
+- **SEO del primer párrafo**
+  - El prompt fuerza que el **primer `<p>`** mencione la `palabra_clave_principal`
+    y/o el `tema` (ej.: "Black Friday cuidado personal").
+
+- **Normalización de enlaces `<a>`**
+  - Se aplica `_normalize_anchor` sobre todos los `<a>` del HTML final.
+  - Resultado: todos los enlaces salen como:
+
+    ```html
+    <a ... target="_blank" rel="noreferrer noopener sponsored nofollow">
+    ```
+
+  - No se reordena el contenido, solo se limpian/añaden atributos.
+
+- **Layout de producto (1.4)**
+  - Para cada producto:
+    - Se busca la `url_imagen` o `url_afiliado` en el HTML generado por el modelo.
+    - Se inserta/reemplaza un heading (`<h3>` en esta versión) antes del bloque
+      donde aparece.
+    - Se define un **segmento** entre ese heading y el siguiente `<h2-4>`.
+    - Dentro del segmento se mueve la primera `<img>` al principio (como
+      `<figure>`) y se inserta un bloque de `Precio orientativo + botón` según
+      heurísticas de párrafo narrativo.
+  - Hay una inyección defensiva de imágenes al final si el modelo ignora alguna
+    `url_imagen`.
+
+### 8.3 Limitaciones conocidas
+
+- El emparejamiento heading/imagen/texto es **frágil**: si el modelo mezcla
+  headings y productos (ej.: H2 de Garnier justo antes de la imagen de CeraVe),
+  la heurística puede reciclar headings y desalinear el contenido.
+- Pueden aparecer **botones o bloques de precio duplicados**, especialmente si
+  el modelo ya generó sus propios botones o si el último párrafo editorial
+  contiene enlaces de producto.
+- No hay un contrato rígido por producto del tipo:
+
+  ```html
+  <h2/h3>titulo producto</h2/h3>
+  <img ... />
+  <p>texto producto</p>
+  <div class="text-muted small">Precio orientativo: ...</div>
+  <div class="btn-buy-amz-wrapper">...</div>
+  ```
+
+### 8.4 Requisitos pendientes para `gc-layout-refactor`
+
+La rama `gc-layout-refactor` debe abordar estos puntos sin romper la release
+estable:
+
+1. **Estructura fija por producto**
+
+   Para cada producto se quiere imponer de forma estricta:
+
+   ```html
+   <h2>título del producto</h2>
+   <img src="URL_IMAGEN" alt="..." loading="lazy" />
+   <p>...texto principal del producto (con enlace Amazon)...</p>
+   <div class="text-muted small">Precio orientativo: {precio}</div>
+   <div class="btn-buy-amz-wrapper" ...>
+     <a class="btn-buy-amz" ... href="URL_AFILIADO"
+        target="_blank" rel="noreferrer noopener sponsored nofollow">
+       Comprar en Amazon
+     </a>
+   </div>
+   ```
+
+   - Un único bloque de botón por producto.
+   - Sin botones ni bloques de precio "huérfanos" al final del artículo.
+
+2. **Emparejamiento correcto título/imagen/texto/precio/botón**
+
+   - El heading de cada producto debe corresponder siempre a su propia imagen,
+     párrafo principal (con su `url_afiliado`), precio y botón.
+   - No se debe reciclar un heading de otro producto solo por proximidad en el
+     HTML libre del modelo.
+
+3. **Mantener las mejoras ya implementadas**
+
+   - Primer párrafo SEO.
+   - Normalización global de `<a>`.
+   - Comportamiento actual de `frontend-api` (títulos sintéticos limpios y
+     rotación de `featured_image`).
+
+4. **Estrategia sugerida**
+
+   - Cambiar el prompt para que el modelo devuelva bloques de producto más
+     estructurados (por ejemplo, `<producto>...</producto>` o
+     `<div class="producto">...</div>` con subtags claras para título, imagen,
+     texto, precio y enlace).
+   - Parsear esos bloques en el backend y construir el HTML final del artículo
+     a partir de bloques canónicos por producto, en lugar de depender solo de
+     regex sobre el HTML libre del modelo.
+
+---
+
 Este documento sirve como punto de entrada rápido tras un restart: abre este
-archivo, revisa secciones 2–5 y luego inspecciona el código de cada microservicio
-si hace falta profundizar.
+archivo, revisa secciones 2–8 y luego inspecciona el código de cada
+microservicio si hace falta profundizar.
