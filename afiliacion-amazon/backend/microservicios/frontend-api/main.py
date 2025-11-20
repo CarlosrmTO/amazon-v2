@@ -336,15 +336,23 @@ def build_wpai_xml(req: LoteRequest, articulos: List[Articulo]) -> str:
 
     for idx, a in enumerate(articulos, start=1):
         xml_parts.append("  <item>")
-        xml_parts.append(f"    <post_title>{escape(_synthetic_title(idx))}</post_title>")
+        post_title = _synthetic_title(idx)
+        xml_parts.append(f"    <post_title>{escape(post_title)}</post_title>")
         xml_parts.append(f"    <post_excerpt>{escape(a.subtitulo)}</post_excerpt>")
         xml_parts.append(f"    <post_content><![CDATA[{a.articulo}]]></post_content>")
         if a.subtitulo_ia:
             xml_parts.append(f"    <subtitulo_ia>{escape(a.subtitulo_ia)}</subtitulo_ia>")
         # featured_image: rotamos entre las imágenes hero configuradas.
+        # Para que rote aunque solo se genere un artículo por export, usamos
+        # un índice derivado del título sintético en lugar del índice
+        # secuencial del artículo.
         # Si no hay ninguna configurada, simplemente no añadimos el campo.
         if heroes:
-            hero_url = heroes[(idx - 1) % len(heroes)]
+            try:
+                h_idx = abs(hash(post_title)) % len(heroes)
+            except Exception:
+                h_idx = (idx - 1) % len(heroes)
+            hero_url = heroes[h_idx]
             xml_parts.append(f"    <featured_image>{escape(hero_url)}</featured_image>")
         # Campos auxiliares para WP All Import (evitar rellenar a mano)
         xml_parts.append("    <category>Productos recomendados</category>")
