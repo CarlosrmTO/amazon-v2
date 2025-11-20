@@ -193,10 +193,20 @@ async def generar_articulos(req: LoteRequest):
         # otros términos. Si no hay principal, usamos busqueda.
         base_kw = (req.busqueda or "").strip()
         main_kw = (req.palabra_clave_principal or "").strip()
+        base_kw_lower = base_kw.lower()
         if main_kw:
             kw_paapi = main_kw
         else:
-            kw_paapi = base_kw
+            # Modo especial Black Friday: usamos "Black Friday" como contexto
+            # editorial, pero no como keyword directa para PAAPI porque suele
+            # devolver pocos o ningún resultado útil. Intentamos extraer la
+            # parte de producto de la búsqueda, y si queda vacía usamos un
+            # genérico como "ofertas".
+            if "black friday" in base_kw_lower:
+                producto = base_kw_lower.replace("black friday", "").strip(" ,.-")
+                kw_paapi = producto or "ofertas"
+            else:
+                kw_paapi = base_kw
 
         productos = await buscar_productos(kw_paapi, req.categoria, total_items)
         # Reordenar: primero con precio disponible, luego el resto

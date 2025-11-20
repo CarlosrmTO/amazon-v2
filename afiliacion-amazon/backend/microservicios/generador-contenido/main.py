@@ -407,6 +407,21 @@ CUERPO:
             # Eliminar cualquier H4 que siga inmediatamente a un H3 (subtítulo innecesario)
             html = re.sub(r'(<h3[^>]*>[\s\S]*?</h3>)\s*<h4[^>]*>[\s\S]*?</h4>', r'\1', html, flags=re.IGNORECASE)
             html = re.sub(r'<p>\s*<a[^>]+href="https?://[^"\s]*amazon\.[^"\s]*"[^>]*>[\s\S]{0,40}</a>\s*</p>', '', html, flags=re.IGNORECASE)
+
+            # Forzar target="_blank" y rel="noreferrer noopener sponsored nofollow" en todos los enlaces.
+            def _normalize_anchor(match: re.Match) -> str:
+                attrs = match.group(1) or ""
+                # Eliminar atributos target y rel existentes
+                attrs = re.sub(r"\s+target=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
+                attrs = re.sub(r"\s+rel=\"[^\"]*\"", "", attrs, flags=re.IGNORECASE)
+                attrs = attrs.rstrip()
+                extra = ' target="_blank" rel="noreferrer noopener sponsored nofollow"'
+                if attrs:
+                    return f"<a{attrs}{extra}>"
+                return f"<a{extra}>"
+
+            html = re.sub(r"<a([^>]*)>", _normalize_anchor, html, flags=re.IGNORECASE)
+
             content = html
         except Exception:
             pass
