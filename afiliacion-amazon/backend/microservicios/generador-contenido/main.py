@@ -240,13 +240,14 @@ CUERPO:
                 target_img = p.url_imagen or ""
                 target_link = p.url_afiliado or p.url_producto or ""
                 pos = -1
-                used_img = False
-                if target_img:
-                    pos = html.find(target_img)
-                    if pos != -1:
-                        used_img = True
-                if pos == -1 and target_link:
+                # Anclamos SIEMPRE primero por el enlace de Amazon (más estable a nivel
+                # narrativo) y solo si no se encuentra usamos la URL de imagen como
+                # referencia de respaldo. Esto evita cruzar imágenes de un producto bajo
+                # el bloque de otro cuando el modelo reutiliza imágenes o las mueve.
+                if target_link:
                     pos = html.find(target_link)
+                if pos == -1 and target_img:
+                    pos = html.find(target_img)
                 if pos == -1:
                     continue
                 head_matches = list(re.finditer(r'<h([2-4])([^>]*)>(.*?)</h\1>', html[:pos], flags=re.IGNORECASE|re.DOTALL))
